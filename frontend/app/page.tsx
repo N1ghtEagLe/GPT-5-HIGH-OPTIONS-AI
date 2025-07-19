@@ -67,54 +67,124 @@ export default function ChatPage() {
   };
 
   const renderMessage = (content: string) => {
-    // Convert markdown tables to HTML
-    const lines = content.split('\n');
-    let inTable = false;
-    let tableHtml = '';
-    let processedContent = '';
+    // First, let's handle code blocks to prevent table parsing inside them
+    const codeBlockRegex = /```[\s\S]*?```/g;
+    const codeBlocks: string[] = [];
+    let processedContent = content.replace(codeBlockRegex, (match) => {
+      codeBlocks.push(match);
+      return `__CODE_BLOCK_${codeBlocks.length - 1}__`;
+    });
 
-    for (const line of lines) {
-      if (line.includes('|') && line.includes('-|-')) {
-        inTable = true;
-        continue;
+    // Function to detect and parse tables
+    const parseTable = (text: string): string => {
+      // Split into lines
+      const lines = text.split('\n');
+      let result = text;
+      let inTable = false;
+      let tableStart = -1;
+      let tableLines: string[] = [];
+      
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+        
+        // Check if this looks like a table separator (contains | and -)
+        if (line.match(/^\|?[\s\-\|:]+\|?$/) && line.includes('-')) {
+          // This is likely a separator line
+          if (i > 0 && lines[i - 1].includes('|')) {
+            // We found a table!
+            inTable = true;
+            tableStart = i - 1;
+            tableLines = [lines[i - 1], line];
+          }
+        } else if (inTable) {
+          if (line.includes('|')) {
+            tableLines.push(line);
+          } else if (line.trim() === '' || !line.includes('|')) {
+            // End of table
+            if (tableLines.length > 2) {
+              const tableHtml = convertTableToHtml(tableLines);
+              const originalTable = tableLines.join('\n');
+              result = result.replace(originalTable, tableHtml);
+            }
+            inTable = false;
+            tableLines = [];
+          }
+        }
       }
       
-      if (inTable && line.includes('|')) {
-        const cells = line.split('|').filter(cell => cell.trim());
-        if (tableHtml === '') {
-          tableHtml = '<table><thead><tr>';
-          cells.forEach(cell => {
-            tableHtml += `<th>${cell.trim()}</th>`;
-          });
-          tableHtml += '</tr></thead><tbody>';
-        } else {
-          tableHtml += '<tr>';
-          cells.forEach(cell => {
-            tableHtml += `<td>${cell.trim()}</td>`;
-          });
-          tableHtml += '</tr>';
-        }
-      } else if (inTable && !line.includes('|')) {
-        tableHtml += '</tbody></table>';
-        processedContent += tableHtml;
-        tableHtml = '';
-        inTable = false;
-        processedContent += line + '\n';
-      } else {
-        processedContent += line + '\n';
+      // Handle case where table goes to end of content
+      if (inTable && tableLines.length > 2) {
+        const tableHtml = convertTableToHtml(tableLines);
+        const originalTable = tableLines.join('\n');
+        result = result.replace(originalTable, tableHtml);
       }
-    }
+      
+      return result;
+    };
+    
+    // Function to convert table lines to HTML
+    const convertTableToHtml = (lines: string[]): string => {
+      let html = '<table>';
+      let headerProcessed = false;
+      
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+        
+        // Skip separator lines
+        if (line.match(/^\|?[\s\-\|:]+\|?$/)) {
+          continue;
+        }
+        
+        // Parse cells - handle both with and without leading/trailing pipes
+        let cells: string[];
+        if (line.startsWith('|') && line.endsWith('|')) {
+          cells = line.slice(1, -1).split('|').map(cell => cell.trim());
+        } else if (line.includes('|')) {
+          cells = line.split('|').map(cell => cell.trim());
+        } else {
+          continue;
+        }
+        
+        // Remove empty cells
+        cells = cells.filter(cell => cell.length > 0);
+        
+        if (cells.length === 0) continue;
+        
+        // First row with data is header
+        if (!headerProcessed) {
+          html += '<thead><tr>';
+          cells.forEach(cell => {
+            html += `<th>${cell}</th>`;
+          });
+          html += '</tr></thead><tbody>';
+          headerProcessed = true;
+        } else {
+          html += '<tr>';
+          cells.forEach(cell => {
+            html += `<td>${cell}</td>`;
+          });
+          html += '</tr>';
+        }
+      }
+      
+      html += '</tbody></table>';
+      return html;
+    };
 
-    if (tableHtml) {
-      tableHtml += '</tbody></table>';
-      processedContent += tableHtml;
-    }
+    // Parse tables
+    processedContent = parseTable(processedContent);
 
-    // Simple markdown to HTML conversion
+    // Restore code blocks
+    codeBlocks.forEach((block, index) => {
+      processedContent = processedContent.replace(`__CODE_BLOCK_${index}__`, block);
+    });
+
+    // Convert other markdown elements
     processedContent = processedContent
+      .replace(/```(.*?)\n([\s\S]*?)```/g, '<pre><code>$2</code></pre>')
       .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
       .replace(/\*(.*?)\*/g, '<em>$1</em>')
-      .replace(/`(.*?)`/g, '<code>$1</code>')
+      .replace(/`([^`]+)`/g, '<code>$1</code>')
       .replace(/\n/g, '<br />');
 
     return <div dangerouslySetInnerHTML={{ __html: processedContent }} />;

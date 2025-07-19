@@ -103,22 +103,61 @@ a {
   border-collapse: collapse;
   margin: 1rem 0;
   font-size: 0.95rem;
+  border: 1px solid #e0e0e0;
+  border-radius: 0.5rem;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
 .message-assistant th,
 .message-assistant td {
   text-align: left;
-  padding: 0.75rem;
+  padding: 0.75rem 1rem;
   border-bottom: 1px solid #e0e0e0;
 }
 
 .message-assistant th {
-  background: #f8f9fa;
+  background: #f0f4f8;
   font-weight: 600;
+  color: #2d3748;
+  text-transform: uppercase;
+  font-size: 0.875rem;
+  letter-spacing: 0.025em;
 }
 
-.message-assistant tr:hover {
-  background: #f8f9fa;
+.message-assistant td {
+  color: #4a5568;
+}
+
+.message-assistant tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.message-assistant tbody tr:hover {
+  background: #f7fafc;
+  transition: background 0.15s ease;
+}
+
+/* Specific styles for numeric data in tables */
+.message-assistant td:nth-child(n+2) {
+  text-align: right;
+  font-family: 'SF Mono', Monaco, Consolas, 'Courier New', monospace;
+}
+
+.message-assistant th:nth-child(n+2) {
+  text-align: right;
+}
+
+/* First column usually contains ticker/label */
+.message-assistant td:first-child,
+.message-assistant th:first-child {
+  text-align: left;
+  font-weight: 500;
+}
+
+/* Zebra striping for better readability */
+.message-assistant tbody tr:nth-child(even) {
+  background: #fafbfc;
 }
 
 /* Input form styles */
@@ -243,5 +282,14 @@ a {
   
   .send-button {
     padding: 0.75rem 1rem;
+  }
+  
+  .message-assistant table {
+    font-size: 0.875rem;
+  }
+  
+  .message-assistant th,
+  .message-assistant td {
+    padding: 0.5rem 0.75rem;
   }
 } 
