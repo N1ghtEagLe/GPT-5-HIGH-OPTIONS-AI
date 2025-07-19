@@ -357,7 +357,7 @@ export const polygonTools = {
       moneynessRange: { min: number; max: number };
       side: 'otm' | 'itm';
     }) => {
-      console.log(`\n🔍 Tool execution - getOptionsChain called with:`, { 
+      debugLog(`\n🔍 Tool execution - getOptionsChain called with:`, { 
         tickers, expirationDate, optionType, moneynessRange, side 
       });
       
@@ -373,16 +373,16 @@ export const polygonTools = {
       }
       
       const polygonClient = restClient(apiKey);
-      console.log('✅ Polygon client initialized with API key');
+      debugLog('✅ Polygon client initialized with API key');
       
       try {
         // Step 1: Get current prices for all tickers in parallel
-        console.log('📊 Fetching current prices for all tickers...');
+        debugLog('📊 Fetching current prices for all tickers...');
         const pricePromises = tickers.map(async (ticker) => {
           try {
             const quote = await polygonClient.stocks.lastQuote(ticker);
             const price = quote.results ? (quote.results.P || quote.results.p || 0) : 0; // P for ask, p for last
-            console.log(`✅ ${ticker} current price: $${price}`);
+            debugLog(`✅ ${ticker} current price: $${price}`);
             return { ticker, price, error: null };
           } catch (error) {
             console.error(`❌ Failed to get price for ${ticker}:`, error);
@@ -428,7 +428,7 @@ export const polygonTools = {
             }
           }
           
-          console.log(`📊 ${ticker} - Current: $${price}, Strike range: $${minStrike.toFixed(2)} - $${maxStrike.toFixed(2)}`);
+          debugLog(`📊 ${ticker} - Current: $${price}, Strike range: $${minStrike.toFixed(2)} - $${maxStrike.toFixed(2)}`);
           
           // Step 3: Get contracts within the strike range
           const contractsResponse = await polygonClient.reference.optionsContracts({
@@ -441,7 +441,7 @@ export const polygonTools = {
           });
           
           if (!contractsResponse.results || contractsResponse.results.length === 0) {
-            console.log(`⚠️ No contracts found for ${ticker} in the specified range`);
+            debugLog(`⚠️ No contracts found for ${ticker} in the specified range`);
             return {
               ticker,
               currentPrice: price,
@@ -450,7 +450,7 @@ export const polygonTools = {
             };
           }
           
-          console.log(`✅ Found ${contractsResponse.results.length} contracts for ${ticker}`);
+          debugLog(`✅ Found ${contractsResponse.results.length} contracts for ${ticker}`);
           
           // Step 4: Fetch pricing for all contracts in parallel
           const pricingPromises = contractsResponse.results.map(async (contract) => {
@@ -509,13 +509,184 @@ export const polygonTools = {
         
         const results = await Promise.all(chainPromises);
         
-        console.log(`\n✅ Options chain retrieval complete`);
+        debugLog(`\n✅ Options chain retrieval complete`);
         
         return {
           expirationDate,
           optionType,
           moneynessRange,
           side,
+          results
+        };
+        
+      } catch (error) {
+        console.error(`❌ Tool execution failed:`, error);
+        
+        return {
+          error: true,
+          message: error instanceof Error ? error.message : 'Failed to fetch options chain',
+          details: error
+        };
+      }
+    }
+  },
+
+  // New tool: Get options chain filtered by absolute strike price range
+  getOptionsChainByStrikes: {
+    description: 'Get option prices filtered by absolute strike price range (e.g., all strikes between $170-$200). Use this when specific strike prices are requested, not percentages.',
+    parameters: z.object({
+      tickers: z.array(z.string()).describe('Array of underlying stock ticker symbols (e.g., ["AAPL", "NVDA"])'),
+      expirationDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).describe('The expiration date in YYYY-MM-DD format'),
+      optionType: z.enum(['call', 'put']).describe('The type of option - either "call" or "put"'),
+      strikeRange: z.object({
+        min: z.number().describe('Minimum strike price (e.g., 170)'),
+        max: z.number().describe('Maximum strike price (e.g., 200)')
+      }).describe('The absolute strike price range')
+    }),
+    execute: async ({ tickers, expirationDate, optionType, strikeRange }: {
+      tickers: string[];
+      expirationDate: string;
+      optionType: 'call' | 'put';
+      strikeRange: { min: number; max: number };
+    }) => {
+      debugLog(`\n🔍 Tool execution - getOptionsChainByStrikes called with:`, { 
+        tickers, expirationDate, optionType, strikeRange 
+      });
+      
+      // Initialize Polygon client
+      const apiKey = process.env.POLYGON_API_KEY;
+      if (!apiKey) {
+        console.error('❌ Polygon API key not found in environment variables');
+        return {
+          error: true,
+          message: 'Polygon API key not configured',
+          details: 'Please ensure POLYGON_API_KEY is set in your .env file'
+        };
+      }
+      
+      const polygonClient = restClient(apiKey);
+      debugLog('✅ Polygon client initialized with API key');
+      
+      try {
+        // Step 1: Get current prices for context (helps with % OTM calculation)
+        debugLog('📊 Fetching current prices for context...');
+        const pricePromises = tickers.map(async (ticker) => {
+          try {
+            const quote = await polygonClient.stocks.lastQuote(ticker);
+            const price = quote.results ? (quote.results.P || quote.results.p || 0) : 0;
+            debugLog(`✅ ${ticker} current price: $${price}`);
+            return { ticker, price };
+          } catch (error) {
+            console.error(`⚠️ Could not get current price for ${ticker}`);
+            return { ticker, price: 0 };
+          }
+        });
+        
+        const tickerPrices = await Promise.all(pricePromises);
+        const priceMap = new Map(tickerPrices.map(({ ticker, price }) => [ticker, price]));
+        
+        // Step 2: Process each ticker
+        const chainPromises = tickers.map(async (ticker) => {
+          const currentPrice = priceMap.get(ticker) || 0;
+          
+          debugLog(`📊 ${ticker} - Fetching contracts with strikes $${strikeRange.min} - $${strikeRange.max}`);
+          
+          // Get contracts within the absolute strike range
+          const contractsResponse = await polygonClient.reference.optionsContracts({
+            underlying_ticker: ticker,
+            expiration_date: expirationDate,
+            contract_type: optionType,
+            'strike_price.gte': strikeRange.min,
+            'strike_price.lte': strikeRange.max,
+            limit: 250 // Higher limit since absolute ranges can be wide
+          });
+          
+          if (!contractsResponse.results || contractsResponse.results.length === 0) {
+            debugLog(`⚠️ No contracts found for ${ticker} in the specified range`);
+            return {
+              ticker,
+              currentPrice,
+              strikeRange,
+              contracts: []
+            };
+          }
+          
+          debugLog(`✅ Found ${contractsResponse.results.length} contracts for ${ticker}`);
+          
+          // Step 3: Fetch pricing for all contracts in parallel
+          const pricingPromises = contractsResponse.results.map(async (contract) => {
+            try {
+              if (!contract.ticker) {
+                return {
+                  ticker: 'Unknown',
+                  strike: contract.strike_price,
+                  error: 'Contract ticker not found'
+                };
+              }
+              const snapshot: any = await polygonClient.options.snapshotOptionContract(ticker, contract.ticker);
+              const results = snapshot.results || {};
+              const lastQuote = results.last_quote || {};
+              const lastTrade = results.last_trade || {};
+              
+              const bid = lastQuote.bid || 0;
+              const ask = lastQuote.ask || 0;
+              const lastTradePrice = lastTrade.price || 0;
+              
+              // Calculate moneyness if we have current price
+              let moneyness = null;
+              if (currentPrice > 0 && contract.strike_price) {
+                if (optionType === 'call') {
+                  moneyness = ((contract.strike_price - currentPrice) / currentPrice) * 100;
+                } else {
+                  moneyness = ((currentPrice - contract.strike_price) / currentPrice) * 100;
+                }
+              }
+              
+              return {
+                ticker: contract.ticker,
+                strike: contract.strike_price,
+                moneyness, // This will show how far OTM/ITM each strike is
+                pricing: {
+                  bid,
+                  ask,
+                  midPrice: bid > 0 && ask > 0 ? (bid + ask) / 2 : null,
+                  lastTrade: lastTradePrice
+                },
+                volume: results.day?.volume || 0,
+                openInterest: results.open_interest || 0,
+                impliedVolatility: results.implied_volatility || null
+              };
+            } catch (error) {
+              console.error(`❌ Failed to get pricing for ${contract.ticker}`);
+              return {
+                ticker: contract.ticker,
+                strike: contract.strike_price,
+                error: 'Failed to fetch pricing'
+              };
+            }
+          });
+          
+          const contractPricing = await Promise.all(pricingPromises);
+          
+          // Sort by strike price
+          contractPricing.sort((a, b) => (a.strike || 0) - (b.strike || 0));
+          
+          return {
+            ticker,
+            currentPrice,
+            strikeRange,
+            contracts: contractPricing
+          };
+        });
+        
+        const results = await Promise.all(chainPromises);
+        
+        debugLog(`\n✅ Options chain by strikes retrieval complete`);
+        
+        return {
+          expirationDate,
+          optionType,
+          strikeRange,
           results
         };
         
