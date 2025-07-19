@@ -103,7 +103,12 @@ async function main() {
 Current datetime: ${easternTime} ET
 Market status: ${marketStatus}
 
-When users ask about stock prices, market data, or financial information, you should use the available tools to fetch the actual data. Always use the getDailyOpenClose tool when asked about stock prices for specific dates. 
+When users ask about stock prices, market data, or financial information, you should use the available tools to fetch the actual data. 
+
+Tool usage guidelines:
+- For a single ticker: use getDailyOpenClose
+- For multiple tickers: use getMultipleDailyOpenClose (more efficient as it fetches all tickers in parallel)
+- Always summarize the results clearly, mentioning any tickers that failed to retrieve data
 
 When users refer to relative dates like "yesterday", "last Friday", or "next week", calculate the actual date based on the current datetime provided above.`
           });
