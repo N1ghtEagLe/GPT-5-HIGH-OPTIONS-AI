@@ -205,7 +205,7 @@ export const polygonTools = {
       
       try {
         // Step 1: Find the exact option contract ticker
-        console.log('🔍 Looking up option contract...');
+        console.log(`🔍 Looking up ${underlyingTicker} $${strike} ${optionType} expiring ${expirationDate}...`);
         const contractsResponse = await polygonClient.reference.optionsContracts({
           underlying_ticker: underlyingTicker,
           expiration_date: expirationDate,
@@ -293,7 +293,8 @@ export const polygonTools = {
           midPrice = (bid + ask) / 2;
         }
         
-        console.log(`✅ Option pricing retrieved successfully`);
+        console.log(`✅ Retrieved pricing for ${optionTicker}\n`);
+        debugLog(`✅ Option pricing retrieved successfully`);
         
         const result = {
           optionTicker: optionTicker,
@@ -377,6 +378,7 @@ export const polygonTools = {
       
       try {
         // Step 1: Get current prices for all tickers in parallel
+        console.log('📊 Getting underlying prices...');
         debugLog('📊 Fetching current prices for all tickers...');
         const pricePromises = tickers.map(async (ticker) => {
           try {
@@ -431,6 +433,7 @@ export const polygonTools = {
           debugLog(`📊 ${ticker} - Current: $${price}, Strike range: $${minStrike.toFixed(2)} - $${maxStrike.toFixed(2)}`);
           
           // Step 3: Get contracts within the strike range
+          console.log(`🔍 Finding ${ticker} ${optionType} contracts in range...`);
           const contractsResponse = await polygonClient.reference.optionsContracts({
             underlying_ticker: ticker,
             expiration_date: expirationDate,
@@ -451,6 +454,7 @@ export const polygonTools = {
           }
           
           debugLog(`✅ Found ${contractsResponse.results.length} contracts for ${ticker}`);
+          console.log(`💰 Getting prices for ${contractsResponse.results.length} ${ticker} options...`);
           
           // Step 4: Fetch pricing for all contracts in parallel
           const pricingPromises = contractsResponse.results.map(async (contract) => {
@@ -509,6 +513,7 @@ export const polygonTools = {
         
         const results = await Promise.all(chainPromises);
         
+        console.log('✅ Option chain data retrieved successfully\n');
         debugLog(`\n✅ Options chain retrieval complete`);
         
         return {
@@ -569,6 +574,7 @@ export const polygonTools = {
       
       try {
         // Step 1: Get current prices for context (helps with % OTM calculation)
+        console.log('📊 Getting current stock prices...');
         debugLog('📊 Fetching current prices for context...');
         const pricePromises = tickers.map(async (ticker) => {
           try {
@@ -592,6 +598,7 @@ export const polygonTools = {
           debugLog(`📊 ${ticker} - Fetching contracts with strikes $${strikeRange.min} - $${strikeRange.max}`);
           
           // Get contracts within the absolute strike range
+          console.log(`🔍 Finding ${ticker} options between $${strikeRange.min}-$${strikeRange.max}...`);
           const contractsResponse = await polygonClient.reference.optionsContracts({
             underlying_ticker: ticker,
             expiration_date: expirationDate,
@@ -612,6 +619,7 @@ export const polygonTools = {
           }
           
           debugLog(`✅ Found ${contractsResponse.results.length} contracts for ${ticker}`);
+          console.log(`💰 Fetching prices for ${contractsResponse.results.length} ${ticker} contracts...`);
           
           // Step 3: Fetch pricing for all contracts in parallel
           const pricingPromises = contractsResponse.results.map(async (contract) => {
@@ -681,6 +689,7 @@ export const polygonTools = {
         
         const results = await Promise.all(chainPromises);
         
+        console.log('✅ Option data retrieved successfully\n');
         debugLog(`\n✅ Options chain by strikes retrieval complete`);
         
         return {
