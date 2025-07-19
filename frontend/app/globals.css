@@ -64,6 +64,19 @@ a {
   padding: 1rem 1.5rem;
   border-radius: 0.75rem;
   line-height: 1.6;
+  overflow-x: auto;
+}
+
+/* Special handling for messages containing tables */
+.message-assistant .message-content:has(table) {
+  max-width: 90%;
+  overflow-x: auto;
+}
+
+/* Ensure tables don't break the layout */
+.message-assistant .message-content table {
+  min-width: min-content;
+  max-width: 100%;
 }
 
 .message-user .message-content {
@@ -276,6 +289,11 @@ a {
     max-width: 85%;
   }
   
+  /* Even more width for tables on mobile */
+  .message-assistant .message-content:has(table) {
+    max-width: 95%;
+  }
+  
   .chat-container {
     padding: 0 0.5rem;
   }
@@ -291,5 +309,20 @@ a {
   .message-assistant th,
   .message-assistant td {
     padding: 0.5rem 0.75rem;
+  }
+}
+
+/* For very wide tables, allow horizontal scrolling within the bubble */
+@media (max-width: 1024px) {
+  .message-assistant .message-content:has(table) {
+    /* On tablets and smaller, tables can scroll horizontally */
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS */
+  }
+  
+  .message-assistant table {
+    /* Ensure table maintains its natural width */
+    width: auto;
+    min-width: 600px; /* Minimum width to maintain readability */
   }
 } 
