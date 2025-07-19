@@ -309,7 +309,7 @@ export const polygonTools = {
             theta: greeks.theta || null,
             vega: greeks.vega || null
           },
-                      lastQuoteTime: lastQuote.last_updated ? new Date(lastQuote.last_updated / 1000000).toISOString() : null,
+          lastQuoteTime: lastQuote.last_updated ? new Date(lastQuote.last_updated / 1000000).toISOString() : null,
           lastTradeTime: lastTradeTime
         };
         
@@ -323,6 +323,200 @@ export const polygonTools = {
         return {
           error: true,
           message: error instanceof Error ? error.message : 'Failed to fetch option pricing data',
+          details: error
+        };
+      }
+    }
+  },
+
+  // New tool: Get options chain filtered by moneyness for multiple tickers
+  getOptionsChain: {
+    description: 'Get option prices for multiple tickers filtered by moneyness percentage (e.g., 1-5% out of the money). Fetches current stock prices and returns only options within the specified moneyness range.',
+    parameters: z.object({
+      tickers: z.array(z.string()).describe('Array of underlying stock ticker symbols (e.g., ["AAPL", "TSLA"])'),
+      expirationDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).describe('The expiration date in YYYY-MM-DD format'),
+      optionType: z.enum(['call', 'put']).describe('The type of option - either "call" or "put"'),
+      moneynessRange: z.object({
+        min: z.number().describe('Minimum moneyness percentage (e.g., 1 for 1% OTM)'),
+        max: z.number().describe('Maximum moneyness percentage (e.g., 5 for 5% OTM)')
+      }).describe('The moneyness range as percentages'),
+      side: z.enum(['otm', 'itm']).describe('Whether to get out-of-the-money or in-the-money options')
+    }),
+    execute: async ({ tickers, expirationDate, optionType, moneynessRange, side }: {
+      tickers: string[];
+      expirationDate: string;
+      optionType: 'call' | 'put';
+      moneynessRange: { min: number; max: number };
+      side: 'otm' | 'itm';
+    }) => {
+      console.log(`\n🔍 Tool execution - getOptionsChain called with:`, { 
+        tickers, expirationDate, optionType, moneynessRange, side 
+      });
+      
+      // Initialize Polygon client
+      const apiKey = process.env.POLYGON_API_KEY;
+      if (!apiKey) {
+        console.error('❌ Polygon API key not found in environment variables');
+        return {
+          error: true,
+          message: 'Polygon API key not configured',
+          details: 'Please ensure POLYGON_API_KEY is set in your .env file'
+        };
+      }
+      
+      const polygonClient = restClient(apiKey);
+      console.log('✅ Polygon client initialized with API key');
+      
+      try {
+        // Step 1: Get current prices for all tickers in parallel
+        console.log('📊 Fetching current prices for all tickers...');
+        const pricePromises = tickers.map(async (ticker) => {
+          try {
+            const quote = await polygonClient.stocks.lastQuote(ticker);
+            const price = quote.results ? (quote.results.P || quote.results.p || 0) : 0; // P for ask, p for last
+            console.log(`✅ ${ticker} current price: $${price}`);
+            return { ticker, price, error: null };
+          } catch (error) {
+            console.error(`❌ Failed to get price for ${ticker}:`, error);
+            return { ticker, price: 0, error: error instanceof Error ? error.message : 'Failed to fetch price' };
+          }
+        });
+        
+        const tickerPrices = await Promise.all(pricePromises);
+        
+        // Process each ticker
+        const chainPromises = tickerPrices.map(async ({ ticker, price, error }) => {
+          if (error || price === 0) {
+            return {
+              ticker,
+              error: error || 'Could not fetch current price',
+              contracts: []
+            };
+          }
+          
+          // Step 2: Calculate strike range based on moneyness
+          let minStrike: number, maxStrike: number;
+          
+          if (optionType === 'call') {
+            if (side === 'otm') {
+              // OTM calls are above current price
+              minStrike = price * (1 + moneynessRange.min / 100);
+              maxStrike = price * (1 + moneynessRange.max / 100);
+            } else {
+              // ITM calls are below current price
+              minStrike = price * (1 - moneynessRange.max / 100);
+              maxStrike = price * (1 - moneynessRange.min / 100);
+            }
+          } else {
+            // Put options
+            if (side === 'otm') {
+              // OTM puts are below current price
+              minStrike = price * (1 - moneynessRange.max / 100);
+              maxStrike = price * (1 - moneynessRange.min / 100);
+            } else {
+              // ITM puts are above current price
+              minStrike = price * (1 + moneynessRange.min / 100);
+              maxStrike = price * (1 + moneynessRange.max / 100);
+            }
+          }
+          
+          console.log(`📊 ${ticker} - Current: $${price}, Strike range: $${minStrike.toFixed(2)} - $${maxStrike.toFixed(2)}`);
+          
+          // Step 3: Get contracts within the strike range
+          const contractsResponse = await polygonClient.reference.optionsContracts({
+            underlying_ticker: ticker,
+            expiration_date: expirationDate,
+            contract_type: optionType,
+            'strike_price.gte': minStrike,
+            'strike_price.lte': maxStrike,
+            limit: 100 // Reasonable limit for a moneyness range
+          });
+          
+          if (!contractsResponse.results || contractsResponse.results.length === 0) {
+            console.log(`⚠️ No contracts found for ${ticker} in the specified range`);
+            return {
+              ticker,
+              currentPrice: price,
+              strikeRange: { min: minStrike, max: maxStrike },
+              contracts: []
+            };
+          }
+          
+          console.log(`✅ Found ${contractsResponse.results.length} contracts for ${ticker}`);
+          
+          // Step 4: Fetch pricing for all contracts in parallel
+          const pricingPromises = contractsResponse.results.map(async (contract) => {
+            try {
+              if (!contract.ticker) {
+                return {
+                  ticker: 'Unknown',
+                  strike: contract.strike_price,
+                  error: 'Contract ticker not found'
+                };
+              }
+              const snapshot: any = await polygonClient.options.snapshotOptionContract(ticker, contract.ticker);
+              const results = snapshot.results || {};
+              const lastQuote = results.last_quote || {};
+              const lastTrade = results.last_trade || {};
+              
+              const bid = lastQuote.bid || 0;
+              const ask = lastQuote.ask || 0;
+              const lastTradePrice = lastTrade.price || 0;
+              
+              return {
+                ticker: contract.ticker,
+                strike: contract.strike_price,
+                pricing: {
+                  bid,
+                  ask,
+                  midPrice: bid > 0 && ask > 0 ? (bid + ask) / 2 : null,
+                  lastTrade: lastTradePrice
+                },
+                volume: results.day?.volume || 0,
+                openInterest: results.open_interest || 0,
+                impliedVolatility: results.implied_volatility || null
+              };
+            } catch (error) {
+              console.error(`❌ Failed to get pricing for ${contract.ticker}`);
+              return {
+                ticker: contract.ticker,
+                strike: contract.strike_price,
+                error: 'Failed to fetch pricing'
+              };
+            }
+          });
+          
+          const contractPricing = await Promise.all(pricingPromises);
+          
+          // Sort by strike price
+          contractPricing.sort((a, b) => (a.strike || 0) - (b.strike || 0));
+          
+          return {
+            ticker,
+            currentPrice: price,
+            strikeRange: { min: minStrike, max: maxStrike },
+            contracts: contractPricing
+          };
+        });
+        
+        const results = await Promise.all(chainPromises);
+        
+        console.log(`\n✅ Options chain retrieval complete`);
+        
+        return {
+          expirationDate,
+          optionType,
+          moneynessRange,
+          side,
+          results
+        };
+        
+      } catch (error) {
+        console.error(`❌ Tool execution failed:`, error);
+        
+        return {
+          error: true,
+          message: error instanceof Error ? error.message : 'Failed to fetch options chain',
           details: error
         };
       }

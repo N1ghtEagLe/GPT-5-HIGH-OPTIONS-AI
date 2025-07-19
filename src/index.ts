@@ -110,7 +110,8 @@ When users ask about stock prices, market data, or financial information, you sh
 
 Tool usage guidelines:
 - For stock prices on a specific date: use getDailyOpenClose (single ticker) or getMultipleDailyOpenClose (multiple tickers)
-- For option pricing: use getOptionPrice - it will find the correct contract and return bid, ask, and last trade prices
+- For a single option contract: use getOptionPrice - it will find the correct contract and return bid, ask, and last trade prices
+- For multiple options by moneyness: use getOptionsChain - it filters options by percentage OTM/ITM and fetches prices for multiple tickers
 - Always summarize the results clearly, mentioning any tickers that failed to retrieve data
 - When users ask about options with relative dates (e.g., "next Friday"), calculate the actual expiration date first
 
