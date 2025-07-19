@@ -1,6 +1,14 @@
 import { z } from 'zod';
 import { restClient } from '@polygon.io/client-js';
 
+// Get debug mode from environment or default to false
+const DEBUG_MODE = process.env.DEBUG_MODE === 'true';
+
+// Helper function for debug logging
+const debugLog = (...args: any[]) => {
+  if (DEBUG_MODE) console.log(...args);
+};
+
 // Tool definition for getting daily open, close, high, and low
 export const polygonTools = {
   // Get daily OHLC (Open, High, Low, Close) data for a specific ticker and date
@@ -12,7 +20,7 @@ export const polygonTools = {
       adjusted: z.boolean().optional().describe('Whether to return adjusted prices for splits')
     }),
     execute: async ({ ticker, date, adjusted }: { ticker: string; date: string; adjusted?: boolean }) => {
-      console.log(`\n🔍 Tool execution - getDailyOpenClose called with:`, { ticker, date, adjusted });
+      debugLog(`\n🔍 Tool execution - getDailyOpenClose called with:`, { ticker, date, adjusted });
       
       // Initialize Polygon client inside execute to ensure env vars are loaded
       const apiKey = process.env.POLYGON_API_KEY;
@@ -177,7 +185,7 @@ export const polygonTools = {
       expirationDate: string; 
       optionType: 'call' | 'put' 
     }) => {
-      console.log(`\n🔍 Tool execution - getOptionPrice called with:`, { 
+      debugLog(`\n🔍 Tool execution - getOptionPrice called with:`, { 
         underlyingTicker, strike, expirationDate, optionType 
       });
       
@@ -225,18 +233,18 @@ export const polygonTools = {
             details: 'The API returned a contract but without a ticker symbol'
           };
         }
-        console.log(`✅ Found option contract: ${optionTicker}`);
+        debugLog(`✅ Found option contract: ${optionTicker}`);
         
         // Step 2: Get the snapshot data for this option
         console.log('📊 Fetching option snapshot data...');
         const snapshot: any = await polygonClient.options.snapshotOptionContract(underlyingTicker, optionTicker);
         
         // DEBUG: Log the raw snapshot response
-        console.log('\n🔍 DEBUG - Raw snapshot response:');
-        console.log(JSON.stringify(snapshot, null, 2));
+        debugLog('\n🔍 DEBUG - Raw snapshot response:');
+        debugLog(JSON.stringify(snapshot, null, 2));
         
         // Step 3: Get the last trade separately for better reliability
-        console.log('\n📊 Fetching last trade data...');
+        debugLog('\n📊 Fetching last trade data...');
         let lastTradeData: any = null;
         let lastTradePrice = 0;
         let lastTradeTime = null;
@@ -245,8 +253,8 @@ export const polygonTools = {
           lastTradeData = await polygonClient.stocks.lastTrade(optionTicker);
           
           // DEBUG: Log the raw last trade response
-          console.log('\n🔍 DEBUG - Raw last trade response:');
-          console.log(JSON.stringify(lastTradeData, null, 2));
+          debugLog('\n🔍 DEBUG - Raw last trade response:');
+          debugLog(JSON.stringify(lastTradeData, null, 2));
           
           if (lastTradeData && lastTradeData.results && lastTradeData.results.p) {
             lastTradePrice = lastTradeData.results.p;
@@ -313,7 +321,7 @@ export const polygonTools = {
           lastTradeTime: lastTradeTime
         };
         
-        console.log(`📊 Option price result:`, result.pricing);
+        debugLog(`📊 Option price result:`, result.pricing);
         return result;
         
       } catch (error) {

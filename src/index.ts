@@ -7,16 +7,24 @@ import { polygonTools } from './tools/polygon-tools.js';
 // Load environment variables from .env file
 dotenv.config();
 
+// Debug mode flag - set to false to disable debug output
+const DEBUG_MODE = false;
+
+// Set debug mode as environment variable for tools to access
+process.env.DEBUG_MODE = DEBUG_MODE.toString();
+
 // Main function to run the chat with tools
 async function main() {
   // Check for API keys
   const openAIKey = process.env.OPENAI_API_KEY;
   const polygonKey = process.env.POLYGON_API_KEY;
   
-  console.log('🔍 Environment check:');
-  console.log(`   OpenAI API key: ${openAIKey ? '✅ Set' : '❌ Not set'}`);
-  console.log(`   Polygon API key: ${polygonKey ? '✅ Set' : '❌ Not set'}`);
-  console.log('');
+  if (DEBUG_MODE) {
+    console.log('🔍 Environment check:');
+    console.log(`   OpenAI API key: ${openAIKey ? '✅ Set' : '❌ Not set'}`);
+    console.log(`   Polygon API key: ${polygonKey ? '✅ Set' : '❌ Not set'}`);
+    console.log('');
+  }
   
   if (!openAIKey || openAIKey === 'your-api-key-here') {
     console.error('\n❌ Please set your OpenAI API key in the OPENAI_API_KEY environment variable');
@@ -42,8 +50,10 @@ async function main() {
   console.log('Type your questions below (or "exit" to quit):\n');
 
   // Debug: Log available tools
-  console.log('🔧 Available tools:', Object.keys(polygonTools));
-  console.log('');
+  if (DEBUG_MODE) {
+    console.log('🔧 Available tools:', Object.keys(polygonTools));
+    console.log('');
+  }
 
   // Create readline interface for interactive input
   const rl = readline.createInterface({
@@ -65,10 +75,12 @@ async function main() {
         console.log('\n⏳ Processing your request...\n');
         
         // Debug: Log the request details
-        console.log('🔍 Debug - Request details:');
-        console.log(`   Prompt: "${input}"`);
-        console.log(`   Tools provided: ${Object.keys(polygonTools).join(', ')}`);
-        console.log('');
+        if (DEBUG_MODE) {
+          console.log('🔍 Debug - Request details:');
+          console.log(`   Prompt: "${input}"`);
+          console.log(`   Tools provided: ${Object.keys(polygonTools).join(', ')}`);
+          console.log('');
+        }
         
                   // Get current date and time in Eastern Time
           const now = new Date();
@@ -132,15 +144,17 @@ When users refer to relative dates like "yesterday", "last Friday", or "next wee
           });
 
         // Debug: Log response details
-        console.log('🔍 Debug - Response details:');
-        console.log(`   Tool calls made: ${result.toolCalls?.length || 0}`);
-        if (result.toolCalls && result.toolCalls.length > 0) {
-          console.log('   Tool calls:');
-          for (const toolCall of result.toolCalls) {
-            console.log(`     - ${toolCall.toolName}(${JSON.stringify(toolCall.args)})`);
+        if (DEBUG_MODE) {
+          console.log('🔍 Debug - Response details:');
+          console.log(`   Tool calls made: ${result.toolCalls?.length || 0}`);
+          if (result.toolCalls && result.toolCalls.length > 0) {
+            console.log('   Tool calls:');
+            for (const toolCall of result.toolCalls) {
+              console.log(`     - ${toolCall.toolName}(${JSON.stringify(toolCall.args)})`);
+            }
           }
+          console.log('');
         }
-        console.log('');
 
         // Display the response
         console.log(`💬 Response:\n${result.text}`);
