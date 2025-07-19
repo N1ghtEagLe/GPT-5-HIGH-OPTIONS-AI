@@ -160,6 +160,173 @@ export const polygonTools = {
         results: processedResults
       };
     }
+  },
+
+  // New tool: Get option pricing data
+  getOptionPrice: {
+    description: 'Get option pricing data including bid, ask, and last trade price for a specific option contract',
+    parameters: z.object({
+      underlyingTicker: z.string().describe('The underlying stock ticker symbol (e.g., AAPL for Apple)'),
+      strike: z.number().describe('The strike price of the option'),
+      expirationDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).describe('The expiration date in YYYY-MM-DD format'),
+      optionType: z.enum(['call', 'put']).describe('The type of option - either "call" or "put"')
+    }),
+    execute: async ({ underlyingTicker, strike, expirationDate, optionType }: { 
+      underlyingTicker: string; 
+      strike: number; 
+      expirationDate: string; 
+      optionType: 'call' | 'put' 
+    }) => {
+      console.log(`\n🔍 Tool execution - getOptionPrice called with:`, { 
+        underlyingTicker, strike, expirationDate, optionType 
+      });
+      
+      // Initialize Polygon client
+      const apiKey = process.env.POLYGON_API_KEY;
+      if (!apiKey) {
+        console.error('❌ Polygon API key not found in environment variables');
+        return {
+          error: true,
+          message: 'Polygon API key not configured',
+          details: 'Please ensure POLYGON_API_KEY is set in your .env file'
+        };
+      }
+      
+      const polygonClient = restClient(apiKey);
+      console.log('✅ Polygon client initialized with API key');
+      
+      try {
+        // Step 1: Find the exact option contract ticker
+        console.log('🔍 Looking up option contract...');
+        const contractsResponse = await polygonClient.reference.optionsContracts({
+          underlying_ticker: underlyingTicker,
+          expiration_date: expirationDate,
+          strike_price: strike,
+          contract_type: optionType,
+          limit: 1
+        });
+        
+        // Check if we found any contracts
+        if (!contractsResponse.results || contractsResponse.results.length === 0) {
+          console.error('❌ No matching option contract found');
+          return {
+            error: true,
+            message: 'No matching option contract found',
+            details: `No ${optionType} option found for ${underlyingTicker} at strike ${strike} expiring ${expirationDate}`
+          };
+        }
+        
+        const optionTicker = contractsResponse.results[0].ticker;
+        if (!optionTicker) {
+          console.error('❌ Option ticker not found in response');
+          return {
+            error: true,
+            message: 'Option ticker not found in response',
+            details: 'The API returned a contract but without a ticker symbol'
+          };
+        }
+        console.log(`✅ Found option contract: ${optionTicker}`);
+        
+        // Step 2: Get the snapshot data for this option
+        console.log('📊 Fetching option snapshot data...');
+        const snapshot: any = await polygonClient.options.snapshotOptionContract(underlyingTicker, optionTicker);
+        
+        // DEBUG: Log the raw snapshot response
+        console.log('\n🔍 DEBUG - Raw snapshot response:');
+        console.log(JSON.stringify(snapshot, null, 2));
+        
+        // Step 3: Get the last trade separately for better reliability
+        console.log('\n📊 Fetching last trade data...');
+        let lastTradeData: any = null;
+        let lastTradePrice = 0;
+        let lastTradeTime = null;
+        
+        try {
+          lastTradeData = await polygonClient.stocks.lastTrade(optionTicker);
+          
+          // DEBUG: Log the raw last trade response
+          console.log('\n🔍 DEBUG - Raw last trade response:');
+          console.log(JSON.stringify(lastTradeData, null, 2));
+          
+          if (lastTradeData && lastTradeData.results && lastTradeData.results.p) {
+            lastTradePrice = lastTradeData.results.p;
+            lastTradeTime = lastTradeData.results.t ? 
+              new Date(lastTradeData.results.t / 1000000).toISOString() : null;
+            console.log(`✅ Last trade found: $${lastTradePrice} at ${lastTradeTime}`);
+          } else {
+            console.log('⚠️ No last trade data available from separate call');
+          }
+        } catch (tradeError) {
+          console.log('⚠️ Could not fetch last trade:', tradeError);
+        }
+        
+        // Extract pricing data from the results object
+        const results = snapshot.results || {};
+        const lastQuote = results.last_quote || {};
+        const snapshotLastTrade = results.last_trade || {};
+        const details = results.details || {};
+        const greeks = results.greeks || {};
+        
+        // Get bid and ask from last_quote
+        const bid = lastQuote.bid || 0;
+        const ask = lastQuote.ask || 0;
+        
+        // Also check snapshot's last trade if separate call didn't work
+        if (lastTradePrice === 0 && snapshotLastTrade.price) {
+          lastTradePrice = snapshotLastTrade.price;
+          lastTradeTime = snapshotLastTrade.sip_timestamp ? 
+            new Date(snapshotLastTrade.sip_timestamp / 1000000).toISOString() : null;
+          console.log(`✅ Using last trade from snapshot: $${lastTradePrice}`);
+        }
+        
+        // Calculate mid price if bid and ask are available
+        let midPrice = null;
+        if (bid > 0 && ask > 0) {
+          midPrice = (bid + ask) / 2;
+        }
+        
+        console.log(`✅ Option pricing retrieved successfully`);
+        
+        const result = {
+          optionTicker: optionTicker,
+          underlyingTicker: underlyingTicker,
+          strike: details.strike_price || strike,
+          expirationDate: details.expiration_date || expirationDate,
+          optionType: details.contract_type || optionType,
+          pricing: {
+            bid: bid,
+            ask: ask,
+            midPrice: midPrice,
+            lastTrade: lastTradePrice,
+            bidAskSpread: ask > 0 && bid > 0 ? ask - bid : null
+          },
+          volume: results.day?.volume || 0,
+          openInterest: results.open_interest || 0,
+          impliedVolatility: results.implied_volatility || null,
+          greeks: {
+            delta: greeks.delta || null,
+            gamma: greeks.gamma || null,
+            theta: greeks.theta || null,
+            vega: greeks.vega || null
+          },
+                      lastQuoteTime: lastQuote.last_updated ? new Date(lastQuote.last_updated / 1000000).toISOString() : null,
+          lastTradeTime: lastTradeTime
+        };
+        
+        console.log(`📊 Option price result:`, result.pricing);
+        return result;
+        
+      } catch (error) {
+        console.error(`❌ Tool execution failed:`, error);
+        
+        // Handle and return any errors
+        return {
+          error: true,
+          message: error instanceof Error ? error.message : 'Failed to fetch option pricing data',
+          details: error
+        };
+      }
+    }
   }
 };
 

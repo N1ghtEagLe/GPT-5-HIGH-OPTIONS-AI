@@ -31,11 +31,14 @@ async function main() {
 
   console.log('🤖 AI Market Data Assistant\n');
   console.log('This assistant can fetch real-time market data using Polygon.io API.\n');
-  console.log('Example prompts:');
+  console.log('Example prompts for stocks:');
   console.log('- "What was Apple\'s closing price on 2025-01-10?"');
   console.log('- "Show me the high and low for TSLA on 2025-01-09"');
   console.log('- "Get me the daily data for GOOGL on 2025-01-08"');
-  console.log('- "What was AAPL stock price on January 10, 2025?"\n');
+  console.log('\nExample prompts for options:');
+  console.log('- "What is the price of the AAPL 220 call expiring 2025-01-24?"');
+  console.log('- "Show me the bid and ask for SPY 500 put expiring next Friday"');
+  console.log('- "Get the price of TSLA 250 call expiring January 31, 2025"\n');
   console.log('Type your questions below (or "exit" to quit):\n');
 
   // Debug: Log available tools
@@ -106,9 +109,10 @@ Market status: ${marketStatus}
 When users ask about stock prices, market data, or financial information, you should use the available tools to fetch the actual data. 
 
 Tool usage guidelines:
-- For a single ticker: use getDailyOpenClose
-- For multiple tickers: use getMultipleDailyOpenClose (more efficient as it fetches all tickers in parallel)
+- For stock prices on a specific date: use getDailyOpenClose (single ticker) or getMultipleDailyOpenClose (multiple tickers)
+- For option pricing: use getOptionPrice - it will find the correct contract and return bid, ask, and last trade prices
 - Always summarize the results clearly, mentioning any tickers that failed to retrieve data
+- When users ask about options with relative dates (e.g., "next Friday"), calculate the actual expiration date first
 
 When users refer to relative dates like "yesterday", "last Friday", or "next week", calculate the actual date based on the current datetime provided above.`
           });
