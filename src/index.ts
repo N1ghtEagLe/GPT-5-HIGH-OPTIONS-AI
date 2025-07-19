@@ -47,7 +47,11 @@ async function main() {
   console.log('- "What is the price of the AAPL 220 call expiring 2025-01-24?"');
   console.log('- "Show me the bid and ask for SPY 500 put expiring next Friday"');
   console.log('- "Get the price of TSLA 250 call expiring January 31, 2025"\n');
-  console.log('Type your questions below (or "exit" to quit):\n');
+  console.log('Type your questions below (or "exit" to quit):');
+  console.log('Commands: /clear - Clear conversation history | /history - Show message count\n');
+
+  // Initialize conversation history array
+  const messages: any[] = [];
 
   // Debug: Log available tools
   if (DEBUG_MODE) {
@@ -71,19 +75,40 @@ async function main() {
         return;
       }
 
+      // Handle special commands
+      if (input.toLowerCase() === '/clear') {
+        messages.length = 0;
+        console.log('\n🧹 Conversation history cleared!\n');
+        askQuestion();
+        return;
+      }
+      
+      if (input.toLowerCase() === '/history') {
+        const userMessages = messages.filter(m => m.role === 'user').length;
+        console.log(`\n📊 Conversation history: ${userMessages} messages (${messages.length} total including system/assistant)\n`);
+        askQuestion();
+        return;
+      }
+
       try {
-        console.log('\n⏳ Processing your request...\n');
+        console.log('\n⏳ Processing your request...');
+        if (messages.length > 0) {
+          console.log(`💭 Using conversation history (${Math.floor(messages.length / 2)} exchanges)\n`);
+        } else {
+          console.log('');
+        }
         
         // Debug: Log the request details
         if (DEBUG_MODE) {
           console.log('🔍 Debug - Request details:');
           console.log(`   Prompt: "${input}"`);
           console.log(`   Tools provided: ${Object.keys(polygonTools).join(', ')}`);
+          console.log(`   Message history length: ${messages.length}`);
           console.log('');
         }
         
-                  // Get current date and time in Eastern Time
-          const now = new Date();
+        // Get current date and time in Eastern Time for system message
+        const now = new Date();
           const easternTime = new Intl.DateTimeFormat('en-US', {
             timeZone: 'America/New_York',
             weekday: 'long',
@@ -105,15 +130,8 @@ async function main() {
           const isWeekday = !['Sat', 'Sun'].includes(dayOfWeek);
           const marketStatus = isWeekday && easternHour >= 9.5 && easternHour < 16 ? 'Open' : 'Closed';
           
-          // Generate text using OpenAI with access to Polygon tools
-          const result = await generateText({
-            model: openai('o3-2025-04-16'),
-            prompt: input,
-            temperature: 1, // o3 model only supports temperature of 1
-            tools: polygonTools, // Include our Polygon tools
-            maxToolRoundtrips: 3, // Allow up to 3 tool calls
-            // Add system message with current date/time
-            system: `You are a helpful AI assistant with access to real-time market data through the Polygon.io API. 
+          // Create system message with current datetime
+          const systemMessage = `You are a helpful AI assistant with access to real-time market data through the Polygon.io API. 
             
 Current datetime: ${easternTime} ET
 Market status: ${marketStatus}
@@ -153,7 +171,31 @@ Data presentation rules:
 - For any pricing data, market data, or numerical comparisons, use well-formatted tables
 - Even for single data points, present them clearly with labels, not as raw data
 - If a tool returns an error or complex nested data, summarize it in plain language
-- Tables are the preferred format for any data that has multiple values or comparisons`
+- Tables are the preferred format for any data that has multiple values or comparisons`;
+
+          // Build messages array with system message and conversation history
+          const currentMessages = [];
+          
+          // Only add system message if this is the first message
+          if (messages.length === 0) {
+            currentMessages.push({ role: 'system', content: systemMessage });
+          } else {
+            // Update system message for existing conversation
+            messages[0] = { role: 'system', content: systemMessage };
+            currentMessages.push(...messages);
+          }
+          
+          // Add the user's current message
+          const userMessage = { role: 'user', content: input };
+          currentMessages.push(userMessage);
+
+          // Generate text using OpenAI with full message history
+          const result = await generateText({
+            model: openai('o3-2025-04-16'),
+            messages: currentMessages,
+            temperature: 1, // o3 model only supports temperature of 1
+            tools: polygonTools, // Include our Polygon tools
+            maxToolRoundtrips: 3, // Allow up to 3 tool calls
           });
 
         // Debug: Log response details
@@ -171,6 +213,10 @@ Data presentation rules:
 
         // Display the response
         console.log(`💬 Response:\n${result.text}`);
+        
+        // Add both user message and assistant response to conversation history
+        messages.push(userMessage);
+        messages.push({ role: 'assistant', content: result.text });
         
         // Show tool usage if any tools were called
         if (result.toolCalls && result.toolCalls.length > 0) {
