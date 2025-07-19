@@ -193,7 +193,7 @@ export default function ChatPage() {
   return (
     <div className="chat-container">
       <header className="chat-header">
-        <h1>🤖 AI Market Data Assistant</h1>
+        <h1>💰 OptionsGPT</h1>
         <p style={{ marginTop: '0.5rem', color: '#6c757d' }}>
           Ask me about stock prices, options data, or any market information
         </p>

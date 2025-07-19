@@ -5,8 +5,8 @@ import './globals.css'
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'AI Market Data Assistant',
-  description: 'Chat with AI to get real-time market data',
+  title: 'OptionsGPT',
+  description: 'Chat with AI to get real-time options and market data',
 }
 
 export default function RootLayout({
