@@ -1,0 +1,22 @@
+{
+  "name": "vercel-ai-simple-chat",
+  "version": "1.0.0",
+  "description": "A simple OpenAI chat demo using Vercel AI SDK",
+  "type": "module",
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "dev": "tsx watch src/index.ts"
+  },
+  "dependencies": {
+    "@ai-sdk/openai": "^0.0.66",
+    "@polygon.io/client-js": "^7.4.0",
+    "ai": "^3.0.23",
+    "dotenv": "^16.4.5",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.0.0"
+  }
+}
