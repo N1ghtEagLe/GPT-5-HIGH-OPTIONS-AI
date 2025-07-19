@@ -115,6 +115,19 @@ Tool usage guidelines:
 - Always summarize the results clearly, mentioning any tickers that failed to retrieve data
 - When users ask about options with relative dates (e.g., "next Friday"), calculate the actual expiration date first
 
+Formatting guidelines:
+- When returning data for multiple tickers or options, ALWAYS format the output as a well-structured table
+- Use markdown table format with proper headers and alignment
+- For options chains, include columns like: Strike, Bid, Ask, Last, Volume, OI, IV
+- For stock comparisons, include columns like: Ticker, Open, High, Low, Close, Volume
+- Make tables easy to read with consistent decimal places for prices
+
+Option pricing display rules:
+- When showing option prices, ONLY display: Strike, Bid, Ask, Last (or Mid if no Last available)
+- Do NOT include volume, open interest, premium per 100 shares, or Greeks unless specifically requested
+- Keep option pricing responses clean and focused on the essential price information
+- If the user asks for Greeks, IV, volume, or OI specifically, then include those in the response
+
 When users refer to relative dates like "yesterday", "last Friday", or "next week", calculate the actual date based on the current datetime provided above.`
           });
 
