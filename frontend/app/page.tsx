@@ -235,10 +235,8 @@ export default function ChatPage() {
               type="password"
               value={pin}
               onChange={(e) => setPin(e.target.value)}
-              placeholder="Enter 8-digit PIN"
+              placeholder="Enter PIN"
               className="pin-input"
-              maxLength={8}
-              pattern="[0-9]{8}"
               autoFocus
               required
             />
