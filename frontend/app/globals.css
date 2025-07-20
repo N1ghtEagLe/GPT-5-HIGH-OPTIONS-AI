@@ -177,6 +177,7 @@ a {
 .chat-input-form {
   padding: 1.5rem 0;
   border-top: 1px solid #e0e0e0;
+  position: relative;
 }
 
 .input-wrapper {
@@ -389,4 +390,15 @@ a {
     padding: 2rem;
     margin: 1rem;
   }
+}
+
+/* Copyright notice */
+.copyright {
+  position: fixed;
+  bottom: 1rem;
+  left: 1rem;
+  font-size: 0.75rem;
+  color: #9ca3af;
+  user-select: none;
+  z-index: 10;
 } 

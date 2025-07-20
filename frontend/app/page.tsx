@@ -306,6 +306,9 @@ export default function ChatPage() {
           </button>
         </div>
       </form>
+      <div className="copyright">
+        © V. Shyfrin
+      </div>
     </div>
   );
 }
