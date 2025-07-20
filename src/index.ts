@@ -195,7 +195,7 @@ Data presentation rules:
             messages: currentMessages,
             temperature: 1, // o3 model only supports temperature of 1
             tools: polygonTools, // Include our Polygon tools
-            maxToolRoundtrips: 3, // Allow up to 3 tool calls
+            maxToolRoundtrips: 200, // Allow up to 3 tool calls
           });
 
         // Debug: Log response details
