@@ -13,6 +13,9 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+// Get the PIN from environment variable
+const ENTRY_PIN = process.env.ENTRY_PIN || '12345678';
+
 // Middleware
 app.use(cors());
 app.use(bodyParser.json());
@@ -22,11 +25,32 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// Authentication endpoint
+app.post('/api/auth', (req, res) => {
+  const { pin } = req.body;
+  
+  
+  if (!pin) {
+    return res.status(400).json({ error: 'PIN is required' });
+  }
+  
+  if (pin === ENTRY_PIN) {
+    res.json({ success: true });
+  } else {
+    res.status(401).json({ error: 'Invalid PIN' });
+  }
+});
+
 // Main chat endpoint
 app.post('/api/chat', async (req, res) => {
   try {
-    // Extract message and conversation history from request
-    const { message, conversationHistory = [] } = req.body;
+    // Extract message, conversation history, and PIN from request
+    const { message, conversationHistory = [], pin } = req.body;
+    
+    // Verify PIN for each request (security measure)
+    if (pin !== ENTRY_PIN) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
     
     if (!message) {
       return res.status(400).json({ error: 'Message is required' });

@@ -12,6 +12,10 @@ export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [pin, setPin] = useState('');
+  const [authError, setAuthError] = useState('');
+  const [authenticatedPin, setAuthenticatedPin] = useState(''); // Store PIN after auth
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -21,6 +25,32 @@ export default function ChatPage() {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  const handlePinSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthError('');
+    
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/auth`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ pin }),
+      });
+
+      if (response.ok) {
+        setIsAuthenticated(true);
+        setAuthenticatedPin(pin); // Store the PIN for future requests
+        setPin(''); // Clear the input field
+      } else {
+        const error = await response.json();
+        setAuthError(error.error || 'Invalid PIN');
+      }
+    } catch (error) {
+      setAuthError('Failed to authenticate. Please try again.');
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -40,6 +70,7 @@ export default function ChatPage() {
         body: JSON.stringify({
           message: userMessage,
           conversationHistory: messages,
+          pin: authenticatedPin, // Use the stored authenticated PIN
         }),
       });
 
@@ -190,6 +221,39 @@ export default function ChatPage() {
     return <div dangerouslySetInnerHTML={{ __html: processedContent }} />;
   };
 
+  // Show PIN entry form if not authenticated
+  if (!isAuthenticated) {
+    return (
+      <div className="chat-container" style={{ justifyContent: 'center', alignItems: 'center' }}>
+        <div className="auth-form">
+          <h1>💰 OptionsGPT</h1>
+          <p style={{ marginTop: '0.5rem', marginBottom: '2rem', color: '#6c757d' }}>
+            Enter your PIN to access the chat
+          </p>
+          <form onSubmit={handlePinSubmit}>
+            <input
+              type="password"
+              value={pin}
+              onChange={(e) => setPin(e.target.value)}
+              placeholder="Enter 8-digit PIN"
+              className="pin-input"
+              maxLength={8}
+              pattern="[0-9]{8}"
+              autoFocus
+              required
+            />
+            {authError && (
+              <p className="auth-error">{authError}</p>
+            )}
+            <button type="submit" className="auth-button">
+              Access Chat
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="chat-container">
       <header className="chat-header">
@@ -246,4 +310,4 @@ export default function ChatPage() {
       </form>
     </div>
   );
-} 
+}
