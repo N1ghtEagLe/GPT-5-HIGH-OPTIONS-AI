@@ -709,6 +709,226 @@ export const polygonTools = {
         };
       }
     }
+  },
+
+  // New tool: Get last trade price (real-time)
+  getLastTrade: {
+    description: 'Get the most recent trade price for a stock ticker. Returns real-time data including pre-market and after-hours trades.',
+    parameters: z.object({
+      ticker: z.string().describe('The stock ticker symbol (e.g., AAPL, SPY, TSLA)')
+    }),
+    execute: async ({ ticker }: { ticker: string }) => {
+      debugLog(`\n🔍 Tool execution - getLastTrade called with:`, { ticker });
+      
+      // Initialize Polygon client
+      const apiKey = process.env.POLYGON_API_KEY;
+      if (!apiKey) {
+        console.error('❌ Polygon API key not found in environment variables');
+        return {
+          error: true,
+          message: 'Polygon API key not configured',
+          details: 'Please ensure POLYGON_API_KEY is set in your .env file'
+        };
+      }
+      
+      const polygonClient = restClient(apiKey);
+      console.log('✅ Polygon client initialized with API key');
+      
+      try {
+        console.log(`📊 Fetching last trade for ${ticker}...`);
+        
+        // Get the last trade
+        const response = await polygonClient.stocks.lastTrade(ticker);
+        
+        if (!response || !response.results) {
+          console.error('❌ No trade data returned');
+          return {
+            error: true,
+            message: 'No trade data available',
+            details: `No recent trades found for ${ticker}`
+          };
+        }
+        
+        const trade = response.results;
+        
+        // Convert timestamp from nanoseconds to readable format
+        const timestamp = Number(trade.t) || Date.now() * 1000000;
+        const tradeTime = new Date(timestamp / 1000000);
+        const easternTime = tradeTime.toLocaleString('en-US', { 
+          timeZone: 'America/New_York',
+          month: 'short',
+          day: 'numeric',
+          hour: 'numeric',
+          minute: '2-digit',
+          second: '2-digit',
+          hour12: true
+        });
+        
+        // Determine market session
+        const hour = tradeTime.getHours();
+        const minutes = tradeTime.getMinutes();
+        const totalMinutes = hour * 60 + minutes;
+        
+        let session = 'Regular';
+        if (totalMinutes < 570) { // Before 9:30 AM
+          session = 'Pre-market';
+        } else if (totalMinutes >= 960) { // After 4:00 PM
+          session = 'After-hours';
+        }
+        
+        console.log(`✅ Retrieved last trade for ${ticker}: $${trade.p}`);
+        
+        const result = {
+          ticker: ticker,
+          price: trade.p,
+          size: trade.s,
+          timestamp: tradeTime.toISOString(),
+          easternTime: easternTime,
+          session: session,
+          exchange: trade.x,
+          conditions: trade.c
+        };
+        
+        debugLog(`📊 Last trade result:`, result);
+        return result;
+        
+      } catch (error) {
+        console.error(`❌ Tool execution failed:`, error);
+        
+        return {
+          error: true,
+          message: error instanceof Error ? error.message : 'Failed to fetch last trade',
+          details: error
+        };
+      }
+    }
+  },
+
+  // New tool: Get last trade for multiple tickers asynchronously
+  getMultipleLastTrades: {
+    description: 'Get the most recent trade prices for multiple stock tickers in parallel. Returns real-time data including pre-market and after-hours trades for all requested tickers.',
+    parameters: z.object({
+      tickers: z.array(z.string()).describe('Array of stock ticker symbols (e.g., ["AAPL", "GOOGL", "TSLA"])')
+    }),
+    execute: async ({ tickers }: { tickers: string[] }) => {
+      console.log(`\n🔍 Tool execution - getMultipleLastTrades called with:`, { tickers });
+      
+      // Initialize Polygon client
+      const apiKey = process.env.POLYGON_API_KEY;
+      if (!apiKey) {
+        console.error('❌ Polygon API key not found in environment variables');
+        return {
+          error: true,
+          message: 'Polygon API key not configured',
+          details: 'Please ensure POLYGON_API_KEY is set in your .env file'
+        };
+      }
+      
+      const polygonClient = restClient(apiKey);
+      console.log('✅ Polygon client initialized with API key');
+      console.log(`📊 Fetching last trades for ${tickers.length} tickers in parallel...`);
+      
+      // Create array of promises for parallel execution
+      const promises = tickers.map(async (ticker) => {
+        try {
+          const response = await polygonClient.stocks.lastTrade(ticker);
+          
+          if (!response || !response.results) {
+            console.error(`❌ No trade data for ${ticker}`);
+            return {
+              ticker: ticker,
+              status: 'error',
+              error: 'No trade data available'
+            };
+          }
+          
+          const trade = response.results;
+          
+          // Convert timestamp from nanoseconds to readable format
+          const timestamp = Number(trade.t) || Date.now() * 1000000;
+          const tradeTime = new Date(timestamp / 1000000);
+          const easternTime = tradeTime.toLocaleString('en-US', { 
+            timeZone: 'America/New_York',
+            month: 'short',
+            day: 'numeric',
+            hour: 'numeric',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: true
+          });
+          
+          // Determine market session
+          const hour = tradeTime.getHours();
+          const minutes = tradeTime.getMinutes();
+          const totalMinutes = hour * 60 + minutes;
+          
+          let session = 'Regular';
+          if (totalMinutes < 570) { // Before 9:30 AM
+            session = 'Pre-market';
+          } else if (totalMinutes >= 960) { // After 4:00 PM
+            session = 'After-hours';
+          }
+          
+          console.log(`✅ Retrieved last trade for ${ticker}: $${trade.p}`);
+          
+          return {
+            ticker: ticker,
+            status: 'success',
+            data: {
+              price: trade.p,
+              size: trade.s,
+              timestamp: tradeTime.toISOString(),
+              easternTime: easternTime,
+              session: session,
+              exchange: trade.x,
+              conditions: trade.c
+            }
+          };
+        } catch (error: any) {
+          console.error(`❌ Failed to fetch ${ticker}:`, error.message);
+          
+          return {
+            ticker: ticker,
+            status: 'error',
+            error: error.message || 'Failed to fetch last trade',
+            errorDetails: error.status === 'NOT_FOUND' ? 'Ticker not found' : error.message
+          };
+        }
+      });
+      
+      // Execute all requests in parallel
+      const results = await Promise.allSettled(promises);
+      
+      // Process results
+      const processedResults = results.map((result, index) => {
+        if (result.status === 'fulfilled') {
+          return result.value;
+        } else {
+          return {
+            ticker: tickers[index],
+            status: 'error',
+            error: 'Request failed',
+            errorDetails: result.reason
+          };
+        }
+      });
+      
+      // Summary statistics
+      const successful = processedResults.filter(r => r.status === 'success').length;
+      const failed = processedResults.filter(r => r.status === 'error').length;
+      
+      console.log(`\n📊 Summary: ${successful} successful, ${failed} failed out of ${tickers.length} tickers`);
+      
+      return {
+        requestedTickers: tickers,
+        summary: {
+          total: tickers.length,
+          successful: successful,
+          failed: failed
+        },
+        results: processedResults
+      };
+    }
   }
 };
 

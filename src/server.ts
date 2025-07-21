@@ -105,6 +105,8 @@ app.post('/api/chat', async (req, res) => {
 Current datetime: ${easternTime} ET
 Market status: ${marketStatus}
 
+Market sessions: Pre-market is 4:00 AM - 9:30 AM ET, Regular session is 9:30 AM - 4:00 PM ET, After-hours is 4:00 PM - 8:00 PM ET.
+
 When users ask about stock prices, market data, or financial information, you should use the available tools to fetch the actual data. 
 
 Tool usage guidelines:
