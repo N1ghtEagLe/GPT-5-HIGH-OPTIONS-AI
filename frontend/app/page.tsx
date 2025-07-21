@@ -17,6 +17,7 @@ export default function ChatPage() {
   const [authError, setAuthError] = useState('');
   const [authenticatedPin, setAuthenticatedPin] = useState(''); // Store PIN after auth
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -25,6 +26,15 @@ export default function ChatPage() {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  // Auto-resize textarea
+  useEffect(() => {
+    const textarea = textareaRef.current;
+    if (textarea) {
+      textarea.style.height = 'auto';
+      textarea.style.height = `${textarea.scrollHeight}px`;
+    }
+  }, [input]);
 
   const handlePinSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -293,13 +303,30 @@ export default function ChatPage() {
 
       <form onSubmit={handleSubmit} className="chat-input-form">
         <div className="input-wrapper">
-          <input
-            type="text"
+          <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => {
+              // Check if on mobile device
+              const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+              
+              if (e.key === 'Enter') {
+                if (isMobile) {
+                  // On mobile, Enter creates new line
+                  return; // Allow default behavior
+                } else if (!e.shiftKey) {
+                  // On desktop, Enter sends (if not holding Shift)
+                  e.preventDefault();
+                  handleSubmit(e);
+                }
+                // Desktop + Shift+Enter creates new line (default behavior)
+              }
+            }}
             placeholder="Ask about stock prices, options, or market data..."
             className="chat-input"
             disabled={isLoading}
+            rows={1}
+            ref={textareaRef}
           />
           <button type="submit" className="send-button" disabled={isLoading}>
             {isLoading ? 'Sending...' : 'Send'}

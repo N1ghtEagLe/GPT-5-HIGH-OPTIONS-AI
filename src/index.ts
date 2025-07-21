@@ -147,6 +147,7 @@ Tool usage guidelines:
 - Always summarize the results clearly, mentioning any tickers that failed to retrieve data
 - When users ask about options with relative dates (e.g., "next Friday"), calculate the actual expiration date first
 - IMPORTANT: After receiving tool results, you MUST format and present the data. Never leave the response empty.
+- if a user asks for an at the money (or atm) option, for the purposes of the tool call, treat it as a 0% otm option. when looking up calls, select the nearest strike above todays price. when looking up puts, select the nearest strike below todays price.
 
 Formatting guidelines:
 - When returning data for multiple tickers or options, ALWAYS format the output as a well-structured table
