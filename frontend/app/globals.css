@@ -1,3 +1,6 @@
+/* Import retro fonts */
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&family=Orbitron:wght@700;900&display=swap');
+
 /* CSS Variables for theming */
 :root {
   /* Light mode colors */
@@ -22,6 +25,8 @@
   --error-color: #dc3545;
   --font-body: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
   --font-mono: 'SF Mono', Monaco, Consolas, 'Courier New', monospace;
+  --font-retro-title: 'Press Start 2P', cursive;
+  --font-retro-subtitle: 'VT323', monospace;
 }
 
 /* Dark mode - Retro 80's terminal theme */
@@ -71,7 +76,7 @@ body {
 
 /* Dark mode text effects */
 .dark body {
-  text-shadow: 0 0 2px var(--text-primary);
+  /* No text shadow for crisp text */
 }
 
 /* Theme toggle styles */
@@ -95,14 +100,10 @@ body {
 }
 
 .dark .theme-toggle {
-  box-shadow: 0 0 10px var(--text-primary), inset 0 0 5px var(--text-primary);
-  animation: terminal-flicker 0.1s infinite alternate;
+  border-color: var(--text-primary);
 }
 
-@keyframes terminal-flicker {
-  0% { opacity: 0.95; }
-  100% { opacity: 1; }
-}
+
 
 .toggle-track {
   display: flex;
@@ -125,7 +126,6 @@ body {
 
 .toggle-thumb.dark {
   background: var(--accent-primary);
-  box-shadow: 0 0 10px var(--accent-primary);
 }
 
 .toggle-label {
@@ -138,7 +138,7 @@ body {
 }
 
 .dark .toggle-label {
-  text-shadow: 0 0 5px var(--text-primary);
+  /* No text shadow for crisp text */
 }
 
 a {
@@ -168,20 +168,25 @@ a {
 
 .chat-header h1 {
   color: var(--text-primary);
+  font-family: var(--font-retro-subtitle);
+  font-size: 2.5rem;
+  letter-spacing: 0.05em;
 }
 
 .dark .chat-header h1 {
-  text-shadow: 0 0 10px var(--text-primary);
-  animation: terminal-glow 2s ease-in-out infinite alternate;
-}
-
-@keyframes terminal-glow {
-  0% { text-shadow: 0 0 10px var(--text-primary); }
-  100% { text-shadow: 0 0 20px var(--text-primary), 0 0 30px var(--text-primary); }
+  /* No text effects for crisp text */
+  font-family: var(--font-retro-subtitle);
 }
 
 .chat-header p {
   color: var(--text-tertiary) !important;
+  font-family: var(--font-retro-subtitle);
+  font-size: 1.25rem;
+  letter-spacing: 0.02em;
+}
+
+.dark .chat-header p {
+  font-family: var(--font-retro-subtitle);
 }
 
 .chat-messages {
@@ -249,7 +254,6 @@ a {
 .dark .message-user .message-content {
   background: var(--accent-primary);
   color: var(--bg-primary);
-  box-shadow: 0 0 10px var(--accent-primary);
   text-shadow: none;
 }
 
@@ -261,7 +265,6 @@ a {
 .dark .message-assistant .message-content {
   background: var(--bg-secondary);
   border: 1px solid var(--border-secondary);
-  box-shadow: 0 0 5px var(--border-secondary);
 }
 
 .message-assistant .message-content pre {
@@ -289,7 +292,6 @@ a {
 
 .dark .message-assistant .message-content code {
   color: var(--accent-primary);
-  text-shadow: 0 0 3px var(--accent-primary);
 }
 
 .message-assistant .message-content pre code {
@@ -312,7 +314,6 @@ a {
 
 .dark .message-assistant table {
   border-color: var(--border-primary);
-  box-shadow: 0 0 10px var(--border-primary);
 }
 
 .message-assistant th,
@@ -337,7 +338,7 @@ a {
 }
 
 .dark .message-assistant th {
-  text-shadow: 0 0 5px var(--text-primary);
+  /* No text shadow for crisp text */
 }
 
 .message-assistant td {
@@ -415,7 +416,7 @@ a {
 }
 
 .dark .chat-input {
-  box-shadow: 0 0 5px var(--border-secondary);
+  /* No glow effect */
 }
 
 .chat-input:focus {
@@ -423,7 +424,7 @@ a {
 }
 
 .dark .chat-input:focus {
-  box-shadow: 0 0 10px var(--accent-primary);
+  /* No glow effect on focus */
 }
 
 .send-button {
@@ -440,7 +441,6 @@ a {
 
 .dark .send-button {
   color: var(--bg-primary);
-  box-shadow: 0 0 10px var(--accent-primary);
   text-transform: uppercase;
   font-weight: bold;
   letter-spacing: 0.1em;
@@ -478,7 +478,6 @@ a {
 
 .dark .loading-dot {
   background: var(--text-primary);
-  box-shadow: 0 0 5px var(--text-primary);
 }
 
 .loading-dot:nth-child(1) {
@@ -530,7 +529,6 @@ a {
 
 .dark .tool-icon {
   color: var(--bg-primary);
-  box-shadow: 0 0 5px var(--tool-success);
 }
 
 /* Responsive design */
@@ -546,6 +544,14 @@ a {
   
   .chat-container {
     padding: 0 0.5rem;
+  }
+  
+  .chat-header h1 {
+    font-size: 1.75rem;
+  }
+  
+  .chat-header p {
+    font-size: 1rem;
   }
   
   .send-button {
@@ -605,7 +611,7 @@ a {
 }
 
 .dark .auth-form h1 {
-  text-shadow: 0 0 10px var(--text-primary);
+  /* No text shadow for crisp text */
 }
 
 .pin-input {
@@ -669,7 +675,7 @@ a {
 }
 
 .dark .auth-error {
-  text-shadow: 0 0 5px var(--error-color);
+  /* No text shadow for crisp text */
 }
 
 @media (max-width: 768px) {
@@ -692,5 +698,4 @@ a {
 
 .dark .copyright {
   color: var(--text-tertiary);
-  text-shadow: 0 0 3px var(--text-tertiary);
 } 
