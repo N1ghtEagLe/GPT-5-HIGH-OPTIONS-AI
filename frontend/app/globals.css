@@ -617,10 +617,14 @@ a {
   font-size: 2rem;
   margin-bottom: 0.5rem;
   color: var(--text-primary);
+  font-weight: 600;
 }
 
 .dark .auth-form h1 {
   /* No text shadow for crisp text */
+  font-family: var(--font-retro-subtitle);
+  font-size: 2.5rem;
+  letter-spacing: 0.05em;
 }
 
 .pin-input {
