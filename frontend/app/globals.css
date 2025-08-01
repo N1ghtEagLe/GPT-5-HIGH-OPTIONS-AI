@@ -168,25 +168,26 @@ a {
 
 .chat-header h1 {
   color: var(--text-primary);
-  font-family: var(--font-retro-subtitle);
-  font-size: 2.5rem;
-  letter-spacing: 0.05em;
+  font-size: 2rem;
+  font-weight: 600;
 }
 
 .dark .chat-header h1 {
   /* No text effects for crisp text */
   font-family: var(--font-retro-subtitle);
+  font-size: 2.5rem;
+  letter-spacing: 0.05em;
 }
 
 .chat-header p {
   color: var(--text-tertiary) !important;
-  font-family: var(--font-retro-subtitle);
-  font-size: 1.25rem;
-  letter-spacing: 0.02em;
+  font-size: 1rem;
 }
 
 .dark .chat-header p {
   font-family: var(--font-retro-subtitle);
+  font-size: 1.25rem;
+  letter-spacing: 0.02em;
 }
 
 .chat-messages {
@@ -547,10 +548,18 @@ a {
   }
   
   .chat-header h1 {
+    font-size: 1.5rem;
+  }
+  
+  .dark .chat-header h1 {
     font-size: 1.75rem;
   }
   
   .chat-header p {
+    font-size: 0.9rem;
+  }
+  
+  .dark .chat-header p {
     font-size: 1rem;
   }
   
