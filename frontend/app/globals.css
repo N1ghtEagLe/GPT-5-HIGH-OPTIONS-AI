@@ -34,8 +34,8 @@
   --text-tertiary: #cc6600;
   --border-primary: #ffaa00;
   --border-secondary: #ff8800;
-  --accent-primary: #00cc00;
-  --accent-hover: #009900;
+  --accent-primary: #ffaa00;
+  --accent-hover: #ff8800;
   --table-header-bg: #110a00;
   --table-header-text: #ffaa00;
   --table-row-hover: #1a0a00;
@@ -43,8 +43,8 @@
   --code-bg: rgba(255, 170, 0, 0.1);
   --pre-bg: #110a00;
   --pre-text: #ffaa00;
-  --tool-success: #00ffff;
-  --error-color: #ff0066;
+  --tool-success: #ffaa00;
+  --error-color: #ff8800;
   --font-body: 'Courier New', Courier, monospace;
   --font-mono: 'Courier New', Courier, monospace;
 }
