@@ -3,6 +3,7 @@ import { openai } from '@ai-sdk/openai';
 import * as readline from 'readline';
 import dotenv from 'dotenv';
 import { polygonTools } from './tools/polygon-tools.js';
+import { webTools } from './tools/web-tools.js';
 
 // Load environment variables from .env file
 dotenv.config();
@@ -149,6 +150,11 @@ Tool usage guidelines:
 - IMPORTANT: After receiving tool results, you MUST format and present the data. Never leave the response empty.
 - if a user asks for an at the money (or atm) option, for the purposes of the tool call, treat it as a 0% otm option. when looking up calls, select the nearest strike above todays price. when looking up puts, select the nearest strike below todays price.
 
+Browsing and data sourcing rules:
+- Use webSearch ONLY for background/context (e.g., earnings call transcripts, news articles, filings, company information)
+- NEVER use webSearch to fetch prices, quotes, option prices, Greeks, OI, or any live/dated market data
+- ALL market data (prices, quotes, OHLC, options, Greeks if requested) MUST come from Polygon tools
+
 Formatting guidelines:
 - When returning data for multiple tickers or options, ALWAYS format the output as a well-structured table
 - Use markdown table format with proper headers and alignment
@@ -190,12 +196,15 @@ Data presentation rules:
           const userMessage = { role: 'user', content: input };
           currentMessages.push(userMessage);
 
+          // Merge tools
+          const tools = { ...polygonTools, ...webTools } as const;
+
           // Generate text using OpenAI with full message history
           const result = await generateText({
-            model: openai('o3-2025-04-16'),
+            model: openai('gpt-5-2025-08-07'),
             messages: currentMessages,
             temperature: 1, // o3 model only supports temperature of 1
-            tools: polygonTools, // Include our Polygon tools
+            tools: tools, // Include Polygon + web tools
             maxToolRoundtrips: 200, // Allow up to 3 tool calls
           });
 

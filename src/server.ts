@@ -5,6 +5,7 @@ import { generateText } from 'ai';
 import { openai } from '@ai-sdk/openai';
 import dotenv from 'dotenv';
 import { polygonTools } from './tools/polygon-tools.js';
+import { webTools } from './tools/web-tools.js';
 
 // Load environment variables
 dotenv.config();
@@ -119,6 +120,11 @@ Tool usage guidelines:
 - When users ask about options with relative dates (e.g., "next Friday"), calculate the actual expiration date first
 - IMPORTANT: After receiving tool results, you MUST format and present the data. Never leave the response empty.
 
+Browsing and data sourcing rules:
+- Use webSearch ONLY for background/context (e.g., earnings call transcripts, news articles, filings, company information)
+- NEVER use webSearch to fetch prices, quotes, option prices, Greeks, OI, or any live/dated market data
+- ALL market data (prices, quotes, OHLC, options, Greeks if requested) MUST come from Polygon tools
+
 Formatting guidelines:
 - When returning data for multiple tickers or options, ALWAYS format the output as a well-structured table
 - Use markdown table format with proper headers and alignment
@@ -152,13 +158,16 @@ Data presentation rules:
     // Add the user's current message
     messages.push({ role: 'user', content: message });
 
+    // Merge tools (Polygon for market data + web search for context)
+    const tools = { ...polygonTools, ...webTools } as const;
+
     // Generate response using OpenAI
     const result = await generateText({
-      model: openai('o3-2025-04-16'),
+      model: openai('gpt-5-2025-08-07'),
       messages: messages,
       temperature: 1,
-      tools: polygonTools,
-      maxToolRoundtrips: 3,
+      tools: tools,
+      maxToolRoundtrips: 5,
     });
 
     // Prepare response data
