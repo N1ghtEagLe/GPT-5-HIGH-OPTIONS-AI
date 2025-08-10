@@ -711,6 +711,110 @@ export const polygonTools = {
     }
   },
 
+  // New tool: Get historical aggregates (aggs) between two times
+  getAggregates: {
+    description: 'Get historical aggregate bars for a stock ticker between two times. Supports minute/hour/day bars via multiplier and timespan.',
+    parameters: z.object({
+      ticker: z.string().describe('The stock ticker symbol (e.g., AAPL, SPY)'),
+      multiplier: z.number().int().min(1).describe('The size of the timespan multiplier (e.g., 1, 5, 15)'),
+      timespan: z.enum(['minute', 'hour', 'day']).describe('Aggregation timespan'),
+      from: z.string().describe('Start time in YYYY-MM-DD or ISO 8601'),
+      to: z.string().describe('End time in YYYY-MM-DD or ISO 8601'),
+      adjusted: z.boolean().optional().describe('Return adjusted data (splits/dividends) if true'),
+      sort: z.enum(['asc', 'desc']).optional().describe('Sort order of results'),
+      limit: z.number().int().min(1).max(50000).optional().describe('Maximum number of bars to return')
+    }),
+    execute: async ({
+      ticker,
+      multiplier,
+      timespan,
+      from,
+      to,
+      adjusted,
+      sort,
+      limit
+    }: {
+      ticker: string;
+      multiplier: number;
+      timespan: 'minute' | 'hour' | 'day';
+      from: string;
+      to: string;
+      adjusted?: boolean;
+      sort?: 'asc' | 'desc';
+      limit?: number;
+    }) => {
+      debugLog(`\n🔍 Tool execution - getAggregates called with:`, { ticker, multiplier, timespan, from, to, adjusted, sort, limit });
+
+      const apiKey = process.env.POLYGON_API_KEY;
+      if (!apiKey) {
+        console.error('❌ Polygon API key not found in environment variables');
+        return {
+          error: true,
+          message: 'Polygon API key not configured',
+          details: 'Please ensure POLYGON_API_KEY is set in your .env file'
+        };
+      }
+
+      const polygonClient = restClient(apiKey);
+      debugLog('✅ Polygon client initialized with API key');
+
+      try {
+        const query: any = {
+          adjusted: adjusted ? 'true' : 'false'
+        };
+        if (typeof sort === 'string') query.sort = sort;
+        if (typeof limit === 'number') query.limit = String(limit);
+
+        console.log(`📊 Fetching aggregates for ${ticker} ${multiplier}-${timespan} from ${from} to ${to}...`);
+        const response: any = await polygonClient.stocks.aggregates(
+          ticker,
+          multiplier,
+          timespan,
+          from,
+          to,
+          query
+        );
+
+        const results = Array.isArray(response.results) ? response.results : [];
+
+        const normalized = results.map((bar: any) => {
+          const timestampMs: number = typeof bar.t === 'number' ? bar.t : Number(bar.t) || 0;
+          const isoTime = timestampMs > 0 ? new Date(timestampMs).toISOString() : null;
+          return {
+            timestamp: isoTime,
+            open: bar.o ?? null,
+            high: bar.h ?? null,
+            low: bar.l ?? null,
+            close: bar.c ?? null,
+            volume: bar.v ?? null,
+            vwap: bar.vw ?? null,
+            transactions: bar.n ?? null
+          };
+        });
+
+        console.log(`✅ Retrieved ${normalized.length} bars for ${ticker}`);
+        return {
+          ticker,
+          multiplier,
+          timespan,
+          from,
+          to,
+          adjusted: !!adjusted,
+          sort: sort || 'asc',
+          count: normalized.length,
+          bars: normalized
+        };
+      } catch (error: any) {
+        console.error('❌ Tool execution failed:', error?.message || error);
+        return {
+          error: true,
+          message: error?.message || 'Failed to fetch aggregates',
+          details: error
+        };
+      }
+    }
+  },
+
   // New tool: Get last trade price (real-time)
   getLastTrade: {
     description: 'Get the most recent trade price for a stock ticker. Returns real-time data including pre-market and after-hours trades.',

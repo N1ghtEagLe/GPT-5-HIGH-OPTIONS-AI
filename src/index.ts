@@ -144,6 +144,11 @@ Tool usage guidelines:
 - For a single option contract: use getOptionPrice - it will find the correct contract and return bid, ask, and last trade prices
 - For option chains by moneyness percentage (e.g., "2-5% OTM"): use getOptionsChain
 - For option chains by strike price range (e.g., "strikes between 170-200"): use getOptionsChainByStrikes
+- For stock prices or OHLC between two times (e.g., intraday or multi-day ranges): use getAggregates with appropriate multiplier and timespan
+- For options Greeks (delta, gamma, theta, vega):
+  - Single contract → use getOptionPrice and read the greeks fields from the snapshot
+  - Multiple strikes → use getOptionsChain or getOptionsChainByStrikes and read greeks per contract
+- For trade ideas or strategy exploration: you may use any Polygon tools at your disposal (prices, chains, aggs, last trades) to gather relevant evidence and support the idea
 - NEVER make multiple getOptionPrice calls when users ask for multiple strikes - use the chain tools instead
 - Always summarize the results clearly, mentioning any tickers that failed to retrieve data
 - When users ask about options with relative dates (e.g., "next Friday"), calculate the actual expiration date first
