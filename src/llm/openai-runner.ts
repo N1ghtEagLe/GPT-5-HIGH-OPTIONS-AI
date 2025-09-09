@@ -51,7 +51,11 @@ export async function runChatWithTools({
     .filter(m => m.role === 'user' || m.role === 'assistant')
     .map(m => ({
       role: m.role,
-      content: [{ type: 'input_text', text: String(m.content ?? '') }]
+      content: [
+        m.role === 'user'
+          ? { type: 'input_text', text: String(m.content ?? '') }
+          : { type: 'output_text', text: String(m.content ?? '') }
+      ]
     }));
 
   try {
