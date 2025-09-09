@@ -54,6 +54,7 @@ app.post('/api/chat', async (req, res) => {
   try {
     // Extract message, conversation history, and PIN from request
     const { message, conversationHistory = [], pin } = req.body;
+    console.log(`[HTTP] /api/chat received. history=${conversationHistory?.length || 0}, messageLen=${(message||'').length}`);
     
     // Verify PIN for each request (security measure)
     if (pin !== ENTRY_PIN) {
@@ -273,6 +274,11 @@ Data presentation rules:
       toolCalls: (result.toolCalls || []).map(tc => ({ toolName: tc.toolName, args: tc.args })),
       usage: result.usage
     };
+
+    console.log(`[HTTP] /api/chat result. toolCalls=${responseData.toolCalls.length}, textLen=${responseData.response?.length || 0}`);
+    if (!responseData.response || responseData.response.length === 0) {
+      console.log('[HTTP] Warning: empty assistant text returned');
+    }
 
     res.json(responseData);
     

@@ -38,52 +38,97 @@ export async function runChatWithTools({
   const toolDefs = toOpenAITools(tools);
   const executed: Array<{ toolName: string; args: any }> = [];
 
+  // Use Responses API recommended fields: instructions + input (messages)
+  let instructions: string | undefined;
+  let convo = sanitized;
+  if (sanitized.length > 0 && sanitized[0].role === 'system') {
+    instructions = sanitized[0].content;
+    convo = sanitized.slice(1);
+  }
+
+  // Convert user/assistant messages into Responses input parts
+  const inputMessages = convo
+    .filter(m => m.role === 'user' || m.role === 'assistant')
+    .map(m => ({
+      role: m.role,
+      content: [{ type: 'input_text', text: String(m.content ?? '') }]
+    }));
+
+  try {
+    console.log(`[LLM] create: model=${model}, messages=${sanitized.length}, tools=${toolDefs.length}`);
+    if (instructions) console.log(`[LLM] instructions length=${instructions.length}`);
+  } catch {}
+
   let response: any = await client.responses.create({
     model,
     reasoning: { effort: 'high' },
     temperature,
-    input: sanitized as any,
+    instructions,
+    input: inputMessages as any,
     tools: toolDefs,
     parallel_tool_calls: true,
   } as any);
 
-  let rounds = 0;
-  while (
-    response?.status === 'requires_action' &&
-    response?.required_action?.type === 'submit_tool_outputs' &&
-    rounds < maxToolRoundtrips
-  ) {
-    rounds++;
-    const toolCalls = response.required_action.submit_tool_outputs.tool_calls || [];
-    const outputs = await Promise.all(
-      toolCalls.map(async (tc: any) => {
-        const name: string = tc.name || tc.function?.name;
-        const args = safeParseArgs(tc.arguments ?? tc.function?.arguments);
-        executed.push({ toolName: name, args });
-        const tool = tools[name];
-        let output: any;
-        try {
-          if (!tool) throw new Error(`Tool not found: ${name}`);
-          output = await tool.execute(args);
-        } catch (err: any) {
-          output = { error: true, message: err?.message || String(err) };
-        }
-        return { tool_call_id: tc.id, output: JSON.stringify(output) };
-      })
-    );
+  try {
+    console.log(`[LLM] initial status=${response?.status}`);
+  } catch {}
 
-    const responsesAny = (client as any).responses;
-    const submitFn = responsesAny?.['submitToolOutputs'] ?? responsesAny?.['submit_tool_outputs'];
-    if (typeof submitFn !== 'function') {
-      throw new Error('OpenAI SDK does not expose responses.submitToolOutputs in this version');
-    }
-    response = await submitFn({
-      response_id: response.id,
-      tool_outputs: outputs,
-    });
+  let rounds = 0;
+  while (rounds < maxToolRoundtrips) {
+    const functionCalls = collectFunctionCalls(response);
+    if (functionCalls.length === 0) break;
+    console.log(`[LLM] function_calls=${functionCalls.length}`);
+
+    const outputs = await Promise.all(functionCalls.map(async (fc) => {
+      const name = fc.name;
+      const args = safeParseArgs(fc.arguments);
+      try {
+        console.log(`[LLM] tool_call: ${name}(${truncate(JSON.stringify(args), 300)})`);
+      } catch {}
+      executed.push({ toolName: name, args });
+      const tool = tools[name];
+      let result: any;
+      try {
+        if (!tool) throw new Error(`Tool not found: ${name}`);
+        result = await tool.execute(args);
+      } catch (err: any) {
+        result = { error: true, message: err?.message || String(err) };
+      }
+      const outputStr = typeof result === 'string' ? result : JSON.stringify(result);
+      try {
+        console.log(`[LLM] tool_result: ${name} -> ${truncate(outputStr, 300)}`);
+      } catch {}
+      return { call_id: fc.call_id, output: outputStr };
+    }));
+
+    const outputItems = outputs.map(o => ({
+      type: 'function_call_output',
+      call_id: o.call_id,
+      output: o.output,
+    }));
+
+    rounds++;
+    response = await client.responses.create({
+      model,
+      previous_response_id: response.id,
+      input: outputItems as any,
+      tools: toolDefs,
+      reasoning: { effort: 'high' },
+      parallel_tool_calls: true,
+    } as any);
+
+    try {
+      console.log(`[LLM] follow-up status=${response?.status}`);
+    } catch {}
   }
 
   const text = extractText(response);
+  try {
+    console.log(`[LLM] final text length=${text?.length || 0}`);
+    if (!text || text.length === 0) {
+      console.log(`[LLM] warning: empty text; output summary: ${summarizeOutput(response)}`);
+    }
+  } catch {}
   const usage = (response as any)?.usage ?? undefined;
   return { text, toolCalls: executed, usage };
 }
@@ -118,4 +163,34 @@ function extractText(res: any): string {
     }
   }
   return parts.join('\n').trim();
+}
+
+function truncate(s: string, n: number) {
+  if (s.length <= n) return s;
+  return s.slice(0, n) + '…';
+}
+
+function summarizeOutput(res: any) {
+  try {
+    const status = res?.status;
+    const count = Array.isArray(res?.output) ? res.output.length : 0;
+    const types = Array.isArray(res?.output) ? res.output.map((x: any) => x?.type).join(',') : 'n/a';
+    return `{status:${status}, outputCount:${count}, types:[${types}]}`;
+  } catch {
+  return 'unavailable';
+  }
+}
+
+function collectFunctionCalls(res: any): Array<{ call_id: string; name: string; arguments: any }> {
+  const calls: Array<{ call_id: string; name: string; arguments: any }> = [];
+  const arr = Array.isArray(res?.output) ? res.output : [];
+  for (const item of arr) {
+    if (item?.type === 'function_call') {
+      const call_id = item?.call_id || item?.id || '';
+      const name = item?.name || item?.function?.name || '';
+      const args = item?.arguments ?? item?.function?.arguments ?? {};
+      if (call_id && name) calls.push({ call_id, name, arguments: args });
+    }
+  }
+  return calls;
 }

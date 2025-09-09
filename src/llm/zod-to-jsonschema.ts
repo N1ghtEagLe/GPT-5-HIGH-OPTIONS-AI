@@ -3,12 +3,13 @@ import { z } from 'zod';
 // Convert our tool registry to OpenAI Responses API tool definitions
 export function toOpenAITools(tools: Record<string, any>) {
   // Responses API expects function tools with top-level name/description/parameters
-  // Example: { type: 'function', name, description, parameters }
+  // Example: { type: 'function', name, description, parameters, strict }
   return Object.entries(tools).map(([name, t]) => ({
     type: 'function',
     name,
     description: t.description || '',
     parameters: toJsonSchema(t.parameters),
+    strict: true,
   }));
 }
 
@@ -20,19 +21,22 @@ export function toJsonSchema(schema: any): any {
   if (schema instanceof (z as any).ZodObject) {
     const shapeGetter = (schema as any)._def.shape;
     const shape = typeof shapeGetter === 'function' ? shapeGetter() : shapeGetter;
+    // With strict function calling, OpenAI requires `required` to include
+    // every key present in `properties`.
     const required: string[] = [];
     const properties: Record<string, any> = {};
 
     for (const [key, sub] of Object.entries<any>(shape)) {
-      const isOptional = isZodOptional(sub);
-      if (!isOptional) required.push(key);
+      // Even if Zod marks a key optional, the Responses API strict schema
+      // requires that `required` includes every property key.
+      required.push(key);
       const subSchema = toJsonSchema(sub);
       const desc = sub?._def?.description;
       if (desc) subSchema.description = desc;
       properties[key] = subSchema;
     }
 
-    const out: any = { type: 'object', properties };
+    const out: any = { type: 'object', properties, additionalProperties: false };
     if (required.length) out.required = required;
     const desc = (schema as any)?._def?.description;
     if (desc) out.description = desc;
