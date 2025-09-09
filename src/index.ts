@@ -1,5 +1,4 @@
-import { generateText } from 'ai';
-import { openai } from '@ai-sdk/openai';
+import { runChatWithTools } from './llm/openai-runner.js';
 import * as readline from 'readline';
 import dotenv from 'dotenv';
 import { polygonTools } from './tools/polygon-tools.js';
@@ -204,13 +203,13 @@ Data presentation rules:
           // Merge tools
           const tools = { ...polygonTools, ...webTools } as const;
 
-          // Generate text using OpenAI with full message history
-          const result = await generateText({
-            model: openai('gpt-5-2025-08-07'),
-            messages: currentMessages,
-            temperature: 1, // o3 model only supports temperature of 1
-            tools: tools, // Include Polygon + web tools
-            maxToolRoundtrips: 200, // Allow up to 3 tool calls
+          // Generate text using OpenAI Responses API with tool loop
+          const result = await runChatWithTools({
+            model: 'gpt-5-2025-08-07',
+            messages: currentMessages as any,
+            temperature: 1, // gpt-5 reasoning supports temperature of 1
+            tools: tools as any, // Include Polygon + web tools
+            maxToolRoundtrips: 200,
           });
 
         // Debug: Log response details
@@ -238,10 +237,6 @@ Data presentation rules:
           console.log('\n🔧 Market data retrieved:');
           for (const toolCall of result.toolCalls) {
             console.log(`   - ${toolCall.toolName}(${JSON.stringify(toolCall.args)})`);
-            // Also show the results if available
-            if (result.toolResults) {
-              console.log(`     Result: ${JSON.stringify(result.toolResults)}`);
-            }
           }
         } else {
           console.log('\n⚠️  No tools were used in this response');

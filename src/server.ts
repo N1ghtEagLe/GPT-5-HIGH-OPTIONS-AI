@@ -1,8 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import bodyParser from 'body-parser';
-import { generateText } from 'ai';
-import { openai } from '@ai-sdk/openai';
+import { runChatWithTools } from './llm/openai-runner.js';
 import dotenv from 'dotenv';
 import { polygonTools } from './tools/polygon-tools.js';
 import { webTools } from './tools/web-tools.js';
@@ -259,22 +258,19 @@ Data presentation rules:
     // Merge tools (Polygon for market data + web search for context)
     const tools = { ...polygonTools, ...webTools } as const;
 
-    // Generate response using OpenAI
-    const result = await generateText({
-      model: openai('gpt-5-2025-08-07'),
-      messages: messages,
+    // Generate response using OpenAI Responses API with tool loop
+    const result = await runChatWithTools({
+      model: 'gpt-5-2025-08-07',
+      messages: messages as any,
       temperature: 1,
-      tools: tools,
+      tools: tools as any,
       maxToolRoundtrips: 50,
     });
 
     // Prepare response data
     const responseData = {
       response: result.text,
-      toolCalls: result.toolCalls?.map(tc => ({
-        toolName: tc.toolName,
-        args: tc.args
-      })) || [],
+      toolCalls: (result.toolCalls || []).map(tc => ({ toolName: tc.toolName, args: tc.args })),
       usage: result.usage
     };
 
