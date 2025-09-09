@@ -276,17 +276,7 @@ export default function ChatPage() {
           <div key={index} className={`message message-${message.role}`}>
             <div className="message-content">
               {renderMessage(message.content)}
-              {message.toolCalls && message.toolCalls.length > 0 && (
-                <div className="tool-calls">
-                  <div style={{ fontWeight: 600 }}>🔧 Market data retrieved:</div>
-                  {message.toolCalls.map((toolCall, idx) => (
-                    <div key={idx} className="tool-call">
-                      <span className="tool-icon">✓</span>
-                      <span>{toolCall.toolName}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
+              {/* Removed tool call list display */}
             </div>
           </div>
         ))}

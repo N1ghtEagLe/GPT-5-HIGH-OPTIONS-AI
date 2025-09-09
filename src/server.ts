@@ -246,7 +246,16 @@ Data presentation rules:
 - For any pricing data, market data, or numerical comparisons, use well-formatted tables
 - Even for single data points, present them clearly with labels, not as raw data
 - If a tool returns an error or complex nested data, summarize it in plain language
-- Tables are the preferred format for any data that has multiple values or comparisons`;
+- Tables are the preferred format for any data that has multiple values or comparisons
+
+USER SHORTCUTS:
+To save the user time and not have to have them type out commonly used requests every time they need it, they can use shortcut phrases as detailed below. for the moment, we will only have one shortcut, but we can add more as needed.
+
+Get Put Prices Short Cut:
+Phrase: [Ticker] [expiry date] go
+Example of Phrase: msft, jan 2026 go
+Action: get put prices for the specified ticker and the specified expiry date, always get puts 0-50% otm and always include a column in the response for bid as % of strike of the option. return the results table with columns in the following order: Strike ($), Bid ($), Ask ($), Last ($), IV, Delta, Strike % OTM, Bid % of Strike
+MAKE SURE TO INCLUDE ALL THE COLUMNS IN THE RESPONSE TABLE.`;
 
     // Build messages array
     const messages = conversationHistory.length === 0 
