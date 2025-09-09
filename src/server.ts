@@ -265,7 +265,7 @@ Data presentation rules:
       messages: messages,
       temperature: 1,
       tools: tools,
-      maxToolRoundtrips: 5,
+      maxToolRoundtrips: 50,
     });
 
     // Prepare response data
