@@ -16,6 +16,7 @@ export default function ChatPage() {
   const [pin, setPin] = useState('');
   const [authError, setAuthError] = useState('');
   const [authenticatedPin, setAuthenticatedPin] = useState(''); // Store PIN after auth
+  const [expandedTools, setExpandedTools] = useState<Record<number, boolean>>({});
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -276,7 +277,36 @@ export default function ChatPage() {
           <div key={index} className={`message message-${message.role}`}>
             <div className="message-content">
               {renderMessage(message.content)}
-              {/* Removed tool call list display */}
+              {message.role === 'assistant' && message.toolCalls && message.toolCalls.length > 0 && (
+                <>
+                  <div
+                    onClick={() => setExpandedTools((prev) => ({ ...prev, [index]: !prev[index] }))}
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'center',
+                      marginTop: '8px',
+                      cursor: 'pointer',
+                      color: '#6c757d',
+                      userSelect: 'none',
+                    }}
+                    aria-label={expandedTools[index] ? 'Hide tool calls' : 'Show tool calls'}
+                    title={expandedTools[index] ? 'Hide tool calls' : 'Show tool calls'}
+                  >
+                    <span style={{ fontSize: '16px' }}>{expandedTools[index] ? '▴' : '▾'}</span>
+                  </div>
+                  {expandedTools[index] && (
+                    <div className="tool-calls" style={{ marginTop: '8px' }}>
+                      <div style={{ fontWeight: 600, marginBottom: '6px' }}>🔧 Market data retrieved:</div>
+                      {message.toolCalls.map((toolCall, idx) => (
+                        <div key={idx} className="tool-call" style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#495057' }}>
+                          <span className="tool-icon">✓</span>
+                          <span>{toolCall.toolName}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
             </div>
           </div>
         ))}
