@@ -190,3 +190,5 @@ This made it easy to spot whether we got `function_call` vs. text, whether execu
 - Add richer error shaping from tools for consistent downstream formatting.
 
 That’s the playbook we used to get tool use working reliably with the Responses API in this codebase.
+
+sadafa
