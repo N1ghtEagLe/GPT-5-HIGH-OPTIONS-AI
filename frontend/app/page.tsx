@@ -216,9 +216,33 @@ export default function ChatPage() {
     // Parse tables
     processedContent = parseTable(processedContent);
 
-    // Restore code blocks
+    // Helper: try to convert a code block that actually contains a markdown table
+    const tryConvertCodeBlockTable = (block: string): string | null => {
+      let inner = block.trim();
+      const startFence = inner.match(/^```[^\n]*\n?/);
+      if (!startFence) return null;
+      inner = inner.slice(startFence[0].length);
+      if (inner.endsWith('```')) inner = inner.slice(0, -3);
+      inner = inner.trim();
+
+      const lines = inner.split('\n').map(l => l.trim());
+      if (lines.length < 2) return null;
+      if (!lines[0].includes('|')) return null;
+      const sep = lines[1];
+      if (!sep || !sep.match(/^\|?[\s\-\|:]+\|?$/) || !sep.includes('-')) return null;
+      const hasData = lines.slice(2).some(l => l.includes('|'));
+      if (!hasData) return null;
+
+      // Treat entire block content as a table
+      const tableHtml = convertTableToHtml(lines);
+      return tableHtml || null;
+    };
+
+    // Restore code blocks (convert any table-looking code blocks into HTML tables)
     codeBlocks.forEach((block, index) => {
-      processedContent = processedContent.replace(`__CODE_BLOCK_${index}__`, block);
+      const tableHtml = tryConvertCodeBlockTable(block);
+      const replacement = tableHtml ?? block;
+      processedContent = processedContent.replace(`__CODE_BLOCK_${index}__`, replacement);
     });
 
     // Convert other markdown elements

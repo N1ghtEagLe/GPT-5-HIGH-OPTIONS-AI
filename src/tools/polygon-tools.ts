@@ -172,7 +172,7 @@ export const polygonTools = {
 
   // New tool: Get option pricing data
   getOptionPrice: {
-    description: 'Get option pricing data including bid, ask, and last trade price for a specific option contract',
+    description: 'Get option pricing data including bid, ask, and last trade price for a specific option contract. Use this ONLY for a single explicit contract. For multiple strikes, use the chain tools (they already include prices and greeks).',
     parameters: z.object({
       underlyingTicker: z.string().describe('The underlying stock ticker symbol (e.g., AAPL for Apple)'),
       strike: z.number().describe('The strike price of the option'),
@@ -340,7 +340,7 @@ export const polygonTools = {
 
   // New tool: Get options chain filtered by moneyness for multiple tickers
   getOptionsChain: {
-    description: 'Get option prices for multiple tickers filtered by moneyness percentage (e.g., 1-5% out of the money). Fetches current stock prices and returns only options within the specified moneyness range.',
+    description: 'Get option prices for multiple tickers filtered by moneyness percentage (e.g., 1-5% out of the money). Fetches current stock prices and returns only options within the specified moneyness range. Returns bid/ask/mid/last, IV, OI, and Greeks (delta, gamma, theta, vega) per contract. Do NOT call getOptionPrice repeatedly for contracts returned by this tool — it already includes prices and greeks.',
     parameters: z.object({
       tickers: z.array(z.string()).describe('Array of underlying stock ticker symbols (e.g., ["AAPL", "TSLA"])'),
       expirationDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).describe('The expiration date in YYYY-MM-DD format'),
@@ -470,14 +470,26 @@ export const polygonTools = {
               const results = snapshot.results || {};
               const lastQuote = results.last_quote || {};
               const lastTrade = results.last_trade || {};
+              const greeks = results.greeks || {};
               
               const bid = lastQuote.bid || 0;
               const ask = lastQuote.ask || 0;
               const lastTradePrice = lastTrade.price || 0;
               
+              // Calculate moneyness if we have current price
+              let moneyness = null as number | null;
+              if (price > 0 && contract.strike_price) {
+                if (optionType === 'call') {
+                  moneyness = ((contract.strike_price - price) / price) * 100;
+                } else {
+                  moneyness = ((price - contract.strike_price) / price) * 100;
+                }
+              }
+              
               return {
                 ticker: contract.ticker,
                 strike: contract.strike_price,
+                moneyness,
                 pricing: {
                   bid,
                   ask,
@@ -486,7 +498,13 @@ export const polygonTools = {
                 },
                 volume: results.day?.volume || 0,
                 openInterest: results.open_interest || 0,
-                impliedVolatility: results.implied_volatility || null
+                impliedVolatility: results.implied_volatility || null,
+                greeks: {
+                  delta: greeks.delta || null,
+                  gamma: greeks.gamma || null,
+                  theta: greeks.theta || null,
+                  vega: greeks.vega || null
+                }
               };
             } catch (error) {
               console.error(`❌ Failed to get pricing for ${contract.ticker}`);
@@ -538,7 +556,7 @@ export const polygonTools = {
 
   // New tool: Get options chain filtered by absolute strike price range
   getOptionsChainByStrikes: {
-    description: 'Get option prices filtered by absolute strike price range (e.g., all strikes between $170-$200). Use this when specific strike prices are requested, not percentages.',
+    description: 'Get option prices filtered by absolute strike price range (e.g., all strikes between $170-$200). Use this when specific strike prices are requested, not percentages. Returns bid/ask/mid/last, IV, OI, and Greeks (delta, gamma, theta, vega) per contract. Do NOT call getOptionPrice repeatedly for contracts returned by this tool — it already includes prices and greeks.',
     parameters: z.object({
       tickers: z.array(z.string()).describe('Array of underlying stock ticker symbols (e.g., ["AAPL", "NVDA"])'),
       expirationDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).describe('The expiration date in YYYY-MM-DD format'),
@@ -635,6 +653,7 @@ export const polygonTools = {
               const results = snapshot.results || {};
               const lastQuote = results.last_quote || {};
               const lastTrade = results.last_trade || {};
+              const greeks = results.greeks || {};
               
               const bid = lastQuote.bid || 0;
               const ask = lastQuote.ask || 0;
@@ -662,7 +681,13 @@ export const polygonTools = {
                 },
                 volume: results.day?.volume || 0,
                 openInterest: results.open_interest || 0,
-                impliedVolatility: results.implied_volatility || null
+                impliedVolatility: results.implied_volatility || null,
+                greeks: {
+                  delta: greeks.delta || null,
+                  gamma: greeks.gamma || null,
+                  theta: greeks.theta || null,
+                  vega: greeks.vega || null
+                }
               };
             } catch (error) {
               console.error(`❌ Failed to get pricing for ${contract.ticker}`);
