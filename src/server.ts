@@ -257,11 +257,42 @@ Example of Phrase: msft, jan 2026 go
 Action: get put prices for the specified ticker and the specified expiry date, always get puts 0-50% otm and always include a column in the response for bid as % of strike of the option. return the results table with columns in the following order: Strike ($), Bid ($), Ask ($), Last ($), IV, Delta, Strike % OTM, Bid % of Strike
 MAKE SURE TO INCLUDE ALL THE COLUMNS IN THE RESPONSE TABLE.
 
-### CHART IMAGE ANALYSIS (when images provided)
-- If the user attaches chart screenshots, analyze what you can reliably see: trend, notable patterns (breakout, flag, H&S), support/resistance, moving averages, RSI/MACD if visible, volume context, and key levels with brief rationale.
-- State uncertainty when labels/axes are unclear. Do not infer tickers/timeframes not visible.
-- Where relevant, corroborate with Polygon data (e.g., recent OHLC aggregates) before asserting levels or trends.
-- Keep output concise: bullets for findings and a short table of key levels with labels (e.g., Support, Resistance, Breakout) and approximate prices.
+    ### CHART IMAGE ANALYSIS (when images provided)
+    - If the user attaches chart screenshots, analyze what you can reliably see: trend, notable patterns (breakout, flag, H&S), support/resistance, moving averages, RSI/MACD if visible, volume context, and key levels with brief rationale.
+    - State uncertainty when labels/axes are unclear. Do not infer tickers/timeframes not visible.
+    - Where relevant, corroborate with Polygon data (e.g., recent OHLC aggregates) before asserting levels or trends.
+    
+
+    What to Extract From the Image (if present)
+    - Meta: Ticker, venue, timeframe; session shading; event markers (earnings/dividends/splits).
+    - Overlays & Regime: Price vs 8/21/50/100/200 MAs and their slopes; Bands/Keltner; anchored/standard VWAP(s).
+    - Structure: HH/HL vs LH/LL; ranges/channels; flags/wedges/triangles; H&S/doubles; gaps (filled/unfilled); recent swing highs/lows.
+    - Momentum: RSI regime (above/below 50; OB/OS) + divergences; MACD/PPO cross & histogram slope/inflection.
+    - Volume/Participation: Relative volume, spikes on breaks; post‑earnings reactions.
+    - Key Levels: Prior swing high/low, range edges, gap edges, MA/VWAP/pivot confluence—quote approximate prices if needed.
+    - Visible events/catalysts only if shown.
+
+    Optional Market‑Data Enrichment (use when it genuinely sharpens risk/targets)
+    Fetch from Polygon and compute succinctly (match the data horizon to the chart timeframe; state any mismatch):
+    - Spot & RV/HV: Last price; realized vol (e.g., 5d/20d σ annualized) from returns on the chart’s timescale; ATR on matching timeframe.
+    - IV & IV Rank:
+      • IV30 (or nearest available ATM IV).
+      • IV Rank = (current IV30 − 1y min) / (1y max − 1y min), or fallback to 6m if 1y not available.
+    - Term Structure: Front vs back‑month IV (contango/backwardation) + simple slope.
+    - Expected Move (EM): Nearest expiry ATM straddle price; report $ and % of spot, and to key events (e.g., through earnings) if accessible.
+    - Skew (explain + compute):
+      • What it is: Call/put skew is the asymmetry of implied vol across strikes—equities typically have put‑skew (OTM puts price higher IV than equidistant calls).
+      • 25‑delta Risk Reversal (RR25) = IV(call 25Δ) − IV(put 25Δ). Negative RR25 → put‑skew.
+      • Symmetric OTM IV diff = IV(−10% OTM put) − IV(+10% OTM call). Report sign and magnitude; note tenor used.
+    - Flow/Positioning (if available): Put/Call volume ratio (session), OI distribution by strike near spot, notable changes. If greeks are available, you may summarize approximate gamma profile qualitatively; otherwise skip.
+    - Earnings proximity: Days to earnings and typical IV behavior if Polygon provides the date.
+
+    Derived Indicator Computation (when helpful)
+    - You may derive: ATR(14), Donchian(20), Bollinger(20,2), Keltner(20,1.5), ADX(14), OBV, anchored VWAP from a visible pivot/earnings bar, custom fast/slow MAs.
+    - Don’t duplicate what’s already plotted unless you need quantitative values. Keep calculations light and targeted to decision‑making.
+
+    Ask for One Extra Indicator only if it materially helps
+    - If a single additional overlay would clearly improve the next pass, end with one crisp request, e.g.: "Add Anchored VWAP from the earnings gap (green 'E') and re‑upload; that will clarify support/resistance confluence."
 
 PLEASE DO NOT FORGET THAT WHEN YOU ARE RETURNING PRICES FOR OPTIONS OR STOCKS, INCLUDING FOR OPTIONS STRUCTURES, YOU MUST PUT THEM IN A TABLE OR MULTIPLE TABLES, FOR EXAMPLE IF YOU'RE RETURNING SEVERL SPREADS, HAVE EACH SPREAD BE IN ITS OWN TABLE WITH THE LONG AND SHORT LEG IN THAT TABLE, AND THEN ANOTHER TABLE FOR THE NEXT SPREAD. DO NO FORGET.`;
     // Extract images (optional) for multimodal inputs
