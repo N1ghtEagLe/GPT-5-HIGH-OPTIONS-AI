@@ -262,7 +262,8 @@ MAKE SURE TO INCLUDE ALL THE COLUMNS IN THE RESPONSE TABLE.
 - State uncertainty when labels/axes are unclear. Do not infer tickers/timeframes not visible.
 - Where relevant, corroborate with Polygon data (e.g., recent OHLC aggregates) before asserting levels or trends.
 - Keep output concise: bullets for findings and a short table of key levels with labels (e.g., Support, Resistance, Breakout) and approximate prices.
-`;
+
+PLEASE DO NOT FORGET THAT WHEN YOU ARE RETURNING PRICES FOR OPTIONS OR STOCKS, INCLUDING FOR OPTIONS STRUCTURES, YOU MUST PUT THEM IN A TABLE OR MULTIPLE TABLES, FOR EXAMPLE IF YOU'RE RETURNING SEVERL SPREADS, HAVE EACH SPREAD BE IN ITS OWN TABLE WITH THE LONG AND SHORT LEG IN THAT TABLE, AND THEN ANOTHER TABLE FOR THE NEXT SPREAD. DO NO FORGET.`;
     // Extract images (optional) for multimodal inputs
     const images: Array<{ mimeType: string; dataBase64?: string; url?: string }> = Array.isArray(req.body?.images)
       ? req.body.images

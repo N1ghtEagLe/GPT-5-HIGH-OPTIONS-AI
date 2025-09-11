@@ -74,10 +74,10 @@ export async function runChatWithTools({
         .filter(img => (img?.dataBase64 || img?.url) && (img?.mimeType || img?.url))
         .map(img => {
           if (img.url) {
-            return { type: 'input_image', image_url: img.url } as any;
+            return { type: 'input_image', image_url: img.url, detail: 'high' } as any;
           }
           const dataUrl = `data:${img.mimeType};base64,${img.dataBase64}`;
-          return { type: 'input_image', image_url: dataUrl } as any;
+          return { type: 'input_image', image_url: dataUrl, detail: 'high' } as any;
         });
       if (imgParts.length > 0) {
         inputMessages[lastUserIndex].content.push(...imgParts);

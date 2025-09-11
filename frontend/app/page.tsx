@@ -535,14 +535,6 @@ export default function ChatPage() {
             rows={1}
             ref={textareaRef}
           />
-          <label style={{ marginLeft: 8, alignSelf: 'flex-end' }}>
-            <input type="file" accept="image/png,image/jpeg,image/webp" multiple style={{ display: 'none' }}
-              onChange={async (e) => {
-                if (e.target.files) await addFiles(e.target.files);
-                e.currentTarget.value = '';
-              }} />
-            <span className="send-button" style={{ cursor: 'pointer', userSelect: 'none' }}>Attach</span>
-          </label>
           <button type="submit" className="send-button" disabled={isLoading}>
             {isLoading ? 'Sending...' : 'Send'}
           </button>
