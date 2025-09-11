@@ -236,6 +236,10 @@ export default function ChatPage() {
     setAttachments(prev => prev.filter(a => a.id !== id));
   };
 
+  const clearSessionImages = () => {
+    setSessionImages([]);
+  };
+
   const renderMessage = (content: string) => {
     // First, let's handle code blocks to prevent table parsing inside them
     const codeBlockRegex = /```[\s\S]*?```/g;
@@ -484,7 +488,10 @@ export default function ChatPage() {
         <div className="input-wrapper" onDrop={onDrop} onDragOver={onDragOver}>
           {attachments.length === 0 && sessionImages.length > 0 && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-              <span style={{ fontSize: 12, color: '#6c757d' }}>Including previous chart:</span>
+              <span style={{ fontSize: 12, color: '#6c757d' }}>Including previous chart</span>
+              <button type="button" onClick={clearSessionImages} aria-label="Stop auto-including chart" title="Stop auto-including chart" style={{
+                background: 'transparent', border: 'none', color: '#6c757d', cursor: 'pointer', fontSize: 16, lineHeight: 1
+              }}>×</button>
               {sessionImages.map((si, idx) => (
                 <img key={idx} src={si.previewUrl} alt="session chart" style={{ width: 48, height: 48, objectFit: 'cover', borderRadius: 6, border: '1px solid #e1e3e6' }} />
               ))}
