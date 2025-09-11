@@ -19,12 +19,14 @@ export async function runChatWithTools({
   tools,
   temperature = 1,
   maxToolRoundtrips = 50,
+  images,
 }: {
   model: string;
   messages: ChatMessage[];
   tools: Record<string, ToolSpec>;
   temperature?: number;
   maxToolRoundtrips?: number;
+  images?: Array<{ mimeType: string; dataBase64?: string; url?: string }>;
 }) {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
@@ -47,7 +49,7 @@ export async function runChatWithTools({
   }
 
   // Convert user/assistant messages into Responses input parts
-  const inputMessages = convo
+  const inputMessages: any[] = convo
     .filter(m => m.role === 'user' || m.role === 'assistant')
     .map(m => ({
       role: m.role,
@@ -57,6 +59,31 @@ export async function runChatWithTools({
           : { type: 'output_text', text: String(m.content ?? '') }
       ]
     }));
+
+  // If images are provided for this turn, attach them to the last user message
+  if (images && images.length > 0) {
+    const lastUserIndex = (() => {
+      for (let i = inputMessages.length - 1; i >= 0; i--) {
+        if (inputMessages[i]?.role === 'user') return i;
+      }
+      return -1;
+    })();
+
+    if (lastUserIndex >= 0) {
+      const imgParts = images
+        .filter(img => (img?.dataBase64 || img?.url) && (img?.mimeType || img?.url))
+        .map(img => {
+          if (img.url) {
+            return { type: 'input_image', image_url: img.url } as any;
+          }
+          const dataUrl = `data:${img.mimeType};base64,${img.dataBase64}`;
+          return { type: 'input_image', image_url: dataUrl } as any;
+        });
+      if (imgParts.length > 0) {
+        inputMessages[lastUserIndex].content.push(...imgParts);
+      }
+    }
+  }
 
   try {
     console.log(`[LLM] create: model=${model}, messages=${sanitized.length}, tools=${toolDefs.length}`);

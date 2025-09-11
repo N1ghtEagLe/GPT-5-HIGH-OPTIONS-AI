@@ -6,6 +6,24 @@ interface Message {
   role: 'user' | 'assistant';
   content: string;
   toolCalls?: Array<{ toolName: string; args: any }>;
+  images?: Array<{ previewUrl: string; mimeType: string }>;
+}
+
+type AttachmentStatus = 'processing' | 'ready' | 'error';
+interface Attachment {
+  id: string;
+  file?: File;
+  mimeType: string;
+  previewUrl: string;
+  dataBase64: string;
+  status: AttachmentStatus;
+  error?: string;
+}
+
+interface SessionImage {
+  mimeType: string;
+  previewUrl: string;
+  dataBase64: string;
 }
 
 export default function ChatPage() {
@@ -17,6 +35,9 @@ export default function ChatPage() {
   const [authError, setAuthError] = useState('');
   const [authenticatedPin, setAuthenticatedPin] = useState(''); // Store PIN after auth
   const [expandedTools, setExpandedTools] = useState<Record<number, boolean>>({});
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [attachError, setAttachError] = useState('');
+  const [sessionImages, setSessionImages] = useState<SessionImage[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -36,6 +57,96 @@ export default function ChatPage() {
       textarea.style.height = `${textarea.scrollHeight}px`;
     }
   }, [input]);
+
+  const MAX_ATTACHMENTS = 3;
+  const ALLOWED_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp']);
+
+  const readFileAsDataURL = (file: File) => new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+
+  const compressImage = async (file: File): Promise<{ base64: string; mimeType: string; previewUrl: string }> => {
+    const dataUrl = await readFileAsDataURL(file);
+    const img = document.createElement('img');
+    img.src = dataUrl;
+    await new Promise((r, j) => { img.onload = () => r(null); img.onerror = j; });
+
+    const maxDim = 1600;
+    const { width, height } = img;
+    const scale = Math.min(1, maxDim / Math.max(width, height));
+    const outW = Math.max(1, Math.round(width * scale));
+    const outH = Math.max(1, Math.round(height * scale));
+
+    const canvas = document.createElement('canvas');
+    canvas.width = outW; canvas.height = outH;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('Canvas not supported');
+    ctx.drawImage(img, 0, 0, outW, outH);
+
+    const mime = file.type === 'image/webp' ? 'image/webp' : 'image/jpeg';
+    const quality = 0.8;
+    const compressedDataUrl = canvas.toDataURL(mime, quality);
+    const base64 = compressedDataUrl.split(',')[1] || '';
+    return { base64, mimeType: mime, previewUrl: compressedDataUrl };
+  };
+
+  const addFiles = async (files: FileList | File[]) => {
+    setAttachError('');
+    const current = [...attachments];
+    const spaceLeft = MAX_ATTACHMENTS - current.length;
+    const toAdd = Array.from(files).slice(0, Math.max(0, spaceLeft));
+    if (toAdd.length === 0) {
+      setAttachError(`Max ${MAX_ATTACHMENTS} images`);
+      return;
+    }
+    const newOnes: Attachment[] = toAdd.map((file) => ({
+      id: `${Date.now()}_${Math.random().toString(36).slice(2)}`,
+      file,
+      mimeType: file.type,
+      previewUrl: '',
+      dataBase64: '',
+      status: 'processing',
+    }));
+    setAttachments(prev => [...prev, ...newOnes]);
+
+    for (const a of newOnes) {
+      try {
+        if (!ALLOWED_TYPES.has(a.mimeType)) throw new Error('Unsupported file type');
+        const { base64, mimeType, previewUrl } = await compressImage(a.file as File);
+        setAttachments(prev => prev.map(x => x.id === a.id ? { ...x, dataBase64: base64, mimeType, previewUrl, status: 'ready' } : x));
+      } catch (err: any) {
+        setAttachments(prev => prev.map(x => x.id === a.id ? { ...x, status: 'error', error: err?.message || 'Failed to process image' } : x));
+      }
+    }
+  };
+
+  const onPaste = async (e: React.ClipboardEvent) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    const imgs: File[] = [];
+    for (const it of Array.from(items)) {
+      if (it.kind === 'file' && it.type.startsWith('image/')) {
+        const f = it.getAsFile();
+        if (f) imgs.push(f);
+      }
+    }
+    if (imgs.length > 0) {
+      e.preventDefault();
+      await addFiles(imgs);
+    }
+  };
+
+  const onDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    if (e.dataTransfer?.files?.length) {
+      await addFiles(e.dataTransfer.files);
+    }
+  };
+
+  const onDragOver = (e: React.DragEvent) => { e.preventDefault(); };
 
   const handlePinSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -65,11 +176,23 @@ export default function ChatPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!input.trim() || isLoading) return;
+    if (!input.trim() && attachments.length === 0) return;
+    if (isLoading) return;
+    if (attachments.some(a => a.status === 'processing')) return;
 
     const userMessage = input.trim();
+    const ready = attachments.filter(a => a.status === 'ready');
+    const useImages: SessionImage[] = (ready.length > 0
+      ? ready.map(a => ({ previewUrl: a.previewUrl, mimeType: a.mimeType, dataBase64: a.dataBase64 }))
+      : sessionImages);
+    const outgoingImages = useImages.map(a => ({ previewUrl: a.previewUrl, mimeType: a.mimeType }));
+    const payloadImages = useImages.map(a => ({ mimeType: a.mimeType, dataBase64: a.dataBase64 }));
     setInput('');
-    setMessages(prev => [...prev, { role: 'user', content: userMessage }]);
+    setAttachments([]);
+    if (ready.length > 0) {
+      setSessionImages(ready.map(a => ({ previewUrl: a.previewUrl, mimeType: a.mimeType, dataBase64: a.dataBase64 })));
+    }
+    setMessages(prev => [...prev, { role: 'user', content: userMessage || '(sent images)', images: outgoingImages }]);
     setIsLoading(true);
 
     try {
@@ -82,6 +205,7 @@ export default function ChatPage() {
           message: userMessage,
           conversationHistory: messages,
           pin: authenticatedPin, // Use the stored authenticated PIN
+          images: payloadImages.length > 0 ? payloadImages : undefined,
         }),
       });
 
@@ -106,6 +230,10 @@ export default function ChatPage() {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const removeAttachment = (id: string) => {
+    setAttachments(prev => prev.filter(a => a.id !== id));
   };
 
   const renderMessage = (content: string) => {
@@ -301,6 +429,13 @@ export default function ChatPage() {
           <div key={index} className={`message message-${message.role}`}>
             <div className="message-content">
               {renderMessage(message.content)}
+              {message.images && message.images.length > 0 && (
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
+                  {message.images.map((img, i) => (
+                    <img key={i} src={img.previewUrl} alt="attachment" style={{ width: 120, height: 120, objectFit: 'cover', borderRadius: 8, border: '1px solid #e1e3e6' }} />
+                  ))}
+                </div>
+              )}
               {message.role === 'assistant' && message.toolCalls && message.toolCalls.length > 0 && (
                 <>
                   <div
@@ -346,10 +481,38 @@ export default function ChatPage() {
       </div>
 
       <form onSubmit={handleSubmit} className="chat-input-form">
-        <div className="input-wrapper">
+        <div className="input-wrapper" onDrop={onDrop} onDragOver={onDragOver}>
+          {attachments.length === 0 && sessionImages.length > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+              <span style={{ fontSize: 12, color: '#6c757d' }}>Including previous chart:</span>
+              {sessionImages.map((si, idx) => (
+                <img key={idx} src={si.previewUrl} alt="session chart" style={{ width: 48, height: 48, objectFit: 'cover', borderRadius: 6, border: '1px solid #e1e3e6' }} />
+              ))}
+            </div>
+          )}
+          {attachments.length > 0 && (
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
+              {attachments.map(att => (
+                <div key={att.id} style={{ position: 'relative', width: 72, height: 72, borderRadius: 8, overflow: 'hidden', border: '1px solid #e1e3e6', background: '#fafbfc' }}>
+                  {att.previewUrl ? (
+                    <img src={att.previewUrl} alt="attachment" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  ) : (
+                    <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6c757d', fontSize: 12 }}>…</div>
+                  )}
+                  <button type="button" onClick={() => removeAttachment(att.id)} aria-label="Remove" title="Remove"
+                    style={{ position: 'absolute', top: 2, right: 2, background: 'rgba(0,0,0,0.6)', color: '#fff', border: 'none', borderRadius: 4, padding: '2px 4px', cursor: 'pointer' }}>×</button>
+                  <div style={{ position: 'absolute', bottom: 2, left: 2, right: 2, textAlign: 'center', fontSize: 11, color: att.status === 'ready' ? '#198754' : att.status === 'error' ? '#dc3545' : '#6c757d', background: 'rgba(255,255,255,0.85)', borderRadius: 3, padding: '0 2px' }}>
+                    {att.status === 'ready' ? 'Attached ✓' : att.status === 'processing' ? 'Processing…' : (att.error || 'Error')}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          {attachError && <div style={{ color: '#dc3545', marginBottom: 6, fontSize: 12 }}>{attachError}</div>}
           <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
+            onPaste={onPaste}
             onKeyDown={(e) => {
               // Check if on mobile device
               const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
@@ -366,12 +529,20 @@ export default function ChatPage() {
                 // Desktop + Shift+Enter creates new line (default behavior)
               }
             }}
-            placeholder="Ask about stock prices, options, or market data..."
+            placeholder="Ask about markets or paste a chart screenshot..."
             className="chat-input"
             disabled={isLoading}
             rows={1}
             ref={textareaRef}
           />
+          <label style={{ marginLeft: 8, alignSelf: 'flex-end' }}>
+            <input type="file" accept="image/png,image/jpeg,image/webp" multiple style={{ display: 'none' }}
+              onChange={async (e) => {
+                if (e.target.files) await addFiles(e.target.files);
+                e.currentTarget.value = '';
+              }} />
+            <span className="send-button" style={{ cursor: 'pointer', userSelect: 'none' }}>Attach</span>
+          </label>
           <button type="submit" className="send-button" disabled={isLoading}>
             {isLoading ? 'Sending...' : 'Send'}
           </button>

@@ -26,7 +26,7 @@ app.use(cors({
   ],
   credentials: true
 }));
-app.use(bodyParser.json());
+app.use(bodyParser.json({ limit: '20mb' }));
 
 // Health check endpoint
 app.get('/health', (req, res) => {
@@ -255,7 +255,28 @@ Get Put Prices Short Cut:
 Phrase: [Ticker] [expiry date] go
 Example of Phrase: msft, jan 2026 go
 Action: get put prices for the specified ticker and the specified expiry date, always get puts 0-50% otm and always include a column in the response for bid as % of strike of the option. return the results table with columns in the following order: Strike ($), Bid ($), Ask ($), Last ($), IV, Delta, Strike % OTM, Bid % of Strike
-MAKE SURE TO INCLUDE ALL THE COLUMNS IN THE RESPONSE TABLE.`;
+MAKE SURE TO INCLUDE ALL THE COLUMNS IN THE RESPONSE TABLE.
+
+### CHART IMAGE ANALYSIS (when images provided)
+- If the user attaches chart screenshots, analyze what you can reliably see: trend, notable patterns (breakout, flag, H&S), support/resistance, moving averages, RSI/MACD if visible, volume context, and key levels with brief rationale.
+- State uncertainty when labels/axes are unclear. Do not infer tickers/timeframes not visible.
+- Where relevant, corroborate with Polygon data (e.g., recent OHLC aggregates) before asserting levels or trends.
+- Keep output concise: bullets for findings and a short table of key levels with labels (e.g., Support, Resistance, Breakout) and approximate prices.
+`;
+    // Extract images (optional) for multimodal inputs
+    const images: Array<{ mimeType: string; dataBase64?: string; url?: string }> = Array.isArray(req.body?.images)
+      ? req.body.images
+          .filter((img: any) => img && (typeof img.dataBase64 === 'string' || typeof img.url === 'string'))
+          .map((img: any) => ({ mimeType: String(img.mimeType || ''), dataBase64: img.dataBase64, url: img.url }))
+      : [];
+    // Basic validation/limits
+    const ALLOWED = new Set(['image/png', 'image/jpeg', 'image/webp']);
+    const validImages = images.filter(i => ALLOWED.has(i.mimeType));
+    if (images.length !== validImages.length) {
+      console.warn('[HTTP] Some images rejected due to mime type');
+    }
+    const maxImages = 3;
+    const trimmedImages = validImages.slice(0, maxImages);
 
     // Build messages array
     const messages = conversationHistory.length === 0 
@@ -275,6 +296,7 @@ MAKE SURE TO INCLUDE ALL THE COLUMNS IN THE RESPONSE TABLE.`;
       temperature: 1,
       tools: tools as any,
       maxToolRoundtrips: 50,
+      images: trimmedImages.length > 0 ? trimmedImages : undefined,
     });
 
     // Prepare response data
