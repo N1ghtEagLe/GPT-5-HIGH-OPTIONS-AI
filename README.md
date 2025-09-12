@@ -1,88 +1,103 @@
 # AI Market Data Assistant
 
-An AI-powered chatbot that can fetch real-time market data using Polygon.io API and Vercel's AI SDK.
+An AI-powered trading assistant chat app that uses OpenAI’s Responses API and Polygon.io to answer market questions, price options, and analyze uploaded chart screenshots.
 
 ## Features
 
-- **Interactive AI Chat**: Natural language interface powered by OpenAI's o3 model
-- **Real-time Market Data**: Fetches stock market data using Polygon.io API
-- **Tool Integration**: Uses Vercel AI SDK's tool system for seamless API integration
-- **Daily OHLC Data**: Get open, high, low, and close prices for any stock on any date
+- Interactive AI chat using OpenAI Responses API (model: `gpt-5-2025-08-07`, reasoning effort high)
+- Real-time market data via Polygon.io (prices, aggregates, option chains, snapshots)
+- Tool loop with parallel tool calls for reliable, evidence-based answers
+- Image understanding: paste/drag chart screenshots; model analyzes technicals
+- Table-first pricing: all quotes and pricing are returned as markdown tables
 
-## Setup
+## Frontend UX (Next.js)
 
-1. **Add your API keys to the `.env` file**:
-   - Open the `.env` file in the project root
-   - Add your OpenAI API key:
-     ```
-     OPENAI_API_KEY=sk-your-actual-openai-key-here
-     ```
-   - Add your Polygon.io API key:
-     ```
-     POLYGON_API_KEY=your-polygon-api-key-here
-     ```
-   - You can get a free Polygon API key at [https://polygon.io](https://polygon.io)
+- Paste or drag-and-drop chart images directly into the input.
+- Thumbnails show before sending; processing state changes to “Attached ✓”.
+- Auto-carry last chart: if you don’t attach a new image, the previous chart is automatically included in follow-up messages.
+- One-click “×” to stop auto-including the previous chart for subsequent messages.
 
-2. **Install dependencies** (if not already done):
-   ```bash
-   npm install
-   ```
+Image constraints (MVP):
+- Types: `image/png`, `image/jpeg`, `image/webp`
+- Max per message: 3 images
+- Client-side compression: max dimension ~1600px, JPEG/WebP quality ~0.8
+- Images are sent inline (base64 data URL) with `detail: 'high'`
 
-## Running the Assistant
+## Backend (Express)
 
-```bash
-npm start
-```
-
-The assistant will start an interactive chat session where you can ask questions about stock market data.
-
-## Example Questions
-
-- "What was Apple's closing price on 2024-01-15?"
-- "Show me the high and low for TSLA on 2024-01-10"
-- "Get me the daily data for GOOGL on 2024-01-12"
-- "What was Microsoft's opening price yesterday?"
-- "Compare Apple and Google's closing prices on 2024-01-10"
+- PIN auth on every request (`ENTRY_PIN`).
+- Body size limit increased for base64 images (JSON 20 MB).
+- OpenAI Responses API with tool loop (parallel tool calls on).
+- Multimodal: images are attached to the last user message as `input_image` items via `image_url` (data URLs) and `detail: 'high'`.
+- Strict formatting in system prompt: any quotes/pricing must be returned as markdown tables first (no prose above tables).
 
 ## Available Tools
 
-Currently, the assistant has access to:
+Polygon tools (`src/tools/polygon-tools.ts`):
+- `getDailyOpenClose`: Daily OHLC for a ticker and date.
+- `getMultipleDailyOpenClose`: Daily OHLC for multiple tickers (parallel).
+- `getLastTrade`: Most recent trade for a ticker.
+- `getMultipleLastTrades`: Last trade for multiple tickers (parallel).
+- `getAggregates`: Historical aggregates (minute/hour/day) between two times.
+- `getOptionsChain`: Options filtered by moneyness range (% OTM/ITM); returns bid/ask/mid/last, IV, OI, Greeks per contract.
+- `getOptionsChainByStrikes`: Options filtered by absolute strike range; returns bid/ask/mid/last, IV, OI, Greeks per contract.
+- `getOptionPrice`: Price + snapshot for a single explicit contract (use only for single contract; chains already include pricing/greeks).
 
-1. **getDailyOpenClose**: Fetches daily open, high, low, and close prices for a specific stock ticker on a given date
-   - Parameters:
-     - `ticker`: Stock symbol (e.g., AAPL, GOOGL, TSLA)
-     - `date`: Date in YYYY-MM-DD format
-     - `adjusted`: Whether to return split-adjusted prices (optional)
+Web tool (`src/tools/web-tools.ts`):
+- `webSearch`: Background context (news, filings, transcripts) only; never for prices/quotes.
 
-## How It Works
+## Pricing Output Rules (Enforced)
 
-1. You ask a question in natural language
-2. The AI understands your intent and extracts the necessary parameters
-3. It calls the appropriate Polygon.io API through the integrated tools
-4. The market data is fetched and returned
-5. The AI formats the response in a human-friendly way
+- Pricing and quotes MUST be in markdown tables; the first content in a pricing response is a table (header + dashed separator).
+- Options chain tables: include Strike, Bid, Ask, Last (or Mid), and additional columns when requested (IV, OI, Volume, %OTM/ITM).
+- Multi-leg structures: provide a legs table with columns like Leg, Side, Type, Strike, Expiry, Bid, Ask, Last, Mid; include a concise Net Credit/Debit summary.
+- No bullets for quotes; prose can follow tables for commentary.
 
-## Technical Details
+## Chart Image Analysis
 
-- **AI Model**: OpenAI o3 (with temperature fixed at 1)
-- **Market Data**: Polygon.io REST API
-- **Framework**: Vercel AI SDK with TypeScript
-- **Tool System**: Zod schema validation for type-safe tool parameters
+When you paste a chart screenshot, the model:
+- Extracts what’s visible: meta (ticker/venue/timeframe), overlays/regime (MAs, VWAPs, bands), structure (trend/ranges/patterns/gaps), momentum (RSI/MACD), volume/participation, key levels, visible events.
+- Optionally enriches with Polygon data matched to the chart’s timeframe: spot, RV/HV/ATR, IV and IV Rank, term structure, expected move, skew metrics, flow/positioning if available, earnings proximity.
+- Keeps calculations targeted; may ask for a single additional overlay if it materially helps (e.g., “Add Anchored VWAP from earnings gap”).
+
+## Setup
+
+1) Root `.env` (backend):
+- `OPENAI_API_KEY=sk-...`
+- `POLYGON_API_KEY=...`
+- `ENTRY_PIN=12345678` (or your PIN)
+
+2) Frontend `.env`:
+- Copy `frontend/env.example` to `frontend/.env.local` and set:
+- `NEXT_PUBLIC_API_URL=http://localhost:3001`
+
+3) Install dependencies:
+- `npm install`
+- `cd frontend && npm install`
+
+## Run
+
+- Backend: `npm run server` (or `npm run server:dev`)
+- Frontend: `cd frontend && npm run dev`
+
+Visit `http://localhost:3000` and enter your PIN.
+
+## Example Questions
+
+- “Show me AAPL daily OHLC for 2024-01-15.”
+- “Price a 2–5% OTM call chain for MSFT for 2025-12-19.”
+- “Risk reversal candidates for GOOGL Jan 2026 — table only.”
+- “Paste a chart: identify trend, key levels, and expected move.”
+
+## Notes & Limits
+
+- Image uploads are inline; no external storage. Reloading clears the carried chart.
+- Up to 3 images per message; large images are compressed client-side.
+- The app enforces tables for pricing; narrative may follow tables.
 
 ## Troubleshooting
 
-If you get an error:
-1. Make sure both API keys are set correctly in the `.env` file
-2. Verify you have access to the OpenAI o3 model
-3. Check that your Polygon API key has the necessary permissions
-4. Ensure the date format is YYYY-MM-DD when asking about specific dates
-5. Note that market data is only available for trading days (not weekends/holidays)
-
-## Future Enhancements
-
-More tools can be added to support:
-- Real-time quotes
-- Historical aggregates (minute, hour, day bars)
-- Company news and financials
-- Options data
-- Crypto and forex data 
+- 400 “unknown parameter” to OpenAI: ensure images are sent as `input_image` with `image_url` (data URL) and valid MIME.
+- No tables in output: confirm the prompt changes are loaded (restart backend) and that you’re on this code.
+- Auth fails: ensure `ENTRY_PIN` matches what you type.
+- Frontend 401/404: confirm `NEXT_PUBLIC_API_URL` points to the backend.
