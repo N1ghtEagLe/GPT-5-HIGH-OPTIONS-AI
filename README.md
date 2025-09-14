@@ -43,8 +43,8 @@ Polygon tools (`src/tools/polygon-tools.ts`):
 - `getOptionsChainByStrikes`: Options filtered by absolute strike range; returns bid/ask/mid/last, IV, OI, Greeks per contract.
 - `getOptionPrice`: Price + snapshot for a single explicit contract (use only for single contract; chains already include pricing/greeks).
 
-Web tool (`src/tools/web-tools.ts`):
-- `webSearch`: Background context (news, filings, transcripts) only; never for prices/quotes.
+Native web search (OpenAI Responses API `web_search_preview`):
+- Used for background/context (news, filings, transcripts) only; never for prices/quotes.
 
 ## Pricing Output Rules (Enforced)
 

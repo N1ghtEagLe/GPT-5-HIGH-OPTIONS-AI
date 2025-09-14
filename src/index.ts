@@ -2,7 +2,6 @@ import { runChatWithTools } from './llm/openai-runner.js';
 import * as readline from 'readline';
 import dotenv from 'dotenv';
 import { polygonTools } from './tools/polygon-tools.js';
-import { webTools } from './tools/web-tools.js';
 
 // Load environment variables from .env file
 dotenv.config();
@@ -138,6 +137,25 @@ Market status: ${marketStatus}
 
 When users ask about stock prices, market data, or financial information, you should use the available tools to fetch the actual data. 
 
+MANDATORY TABLE FORMAT — Polygon Data
+- Absolutely ALL information derived from Polygon tools (prices, OHLC/aggregates, option chains, snapshots, Greeks, IV/OI, last trades) MUST be presented as proper GitHub‑style markdown tables.
+- The FIRST content of any response that contains Polygon data MUST be a table. Do not place any prose before the table.
+- Tables MUST have:
+  • A header row, and
+  • An immediate separator row made of dashes and pipes (e.g., \`| --- | ---: |\`) so markdown renders correctly.
+- Do NOT wrap tables in code fences. Do NOT output ASCII/box‑drawing tables. Use markdown pipes with a dashed separator line.
+- Prefer numeric alignment with trailing colons in the separator for numeric columns (e.g., \`---:\`) when helpful.
+- If there is only one record, you may still present it as a 2‑column key/value table.
+
+Example (correct markdown table):
+| Strike ($) | Bid ($) | Ask ($) | Last ($) | IV   | Delta |
+|-----------:|--------:|--------:|---------:|-----:|------:|
+| 25.00      | 2.57    | 3.25    | 3.08     | 86.5%| -0.17 |
+
+Incorrect (missing dashed separator — do NOT do this):
+Strike ($) | Bid ($) | Ask ($) | Last ($) | IV | Delta
+25.00 | 2.57 | 3.25 | 3.08 | 86.5% | -0.17
+
 Tool usage guidelines:
 - For stock prices on a specific date: use getDailyOpenClose (single ticker) or getMultipleDailyOpenClose (multiple tickers)
 - For a single option contract: use getOptionPrice - it will find the correct contract and return bid, ask, and last trade prices
@@ -155,8 +173,8 @@ Tool usage guidelines:
 - if a user asks for an at the money (or atm) option, for the purposes of the tool call, treat it as a 0% otm option. when looking up calls, select the nearest strike above todays price. when looking up puts, select the nearest strike below todays price.
 
 Browsing and data sourcing rules:
-- Use webSearch ONLY for background/context (e.g., earnings call transcripts, news articles, filings, company information)
-- NEVER use webSearch to fetch prices, quotes, option prices, Greeks, OI, or any live/dated market data
+- Use web search ONLY for background/context (e.g., earnings call transcripts, news articles, filings, company information)
+- NEVER use web search to fetch prices, quotes, option prices, Greeks, OI, or any live/dated market data
 - ALL market data (prices, quotes, OHLC, options, Greeks if requested) MUST come from Polygon tools
 
 Formatting guidelines:
@@ -200,8 +218,8 @@ Data presentation rules:
           const userMessage = { role: 'user', content: input };
           currentMessages.push(userMessage);
 
-          // Merge tools
-          const tools = { ...polygonTools, ...webTools } as const;
+          // Merge tools (Polygon for market data). Web search is provided natively by OpenAI.
+          const tools = { ...polygonTools } as const;
 
           // Generate text using OpenAI Responses API with tool loop
           const result = await runChatWithTools({

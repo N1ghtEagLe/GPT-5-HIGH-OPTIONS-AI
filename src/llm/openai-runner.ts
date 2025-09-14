@@ -38,6 +38,8 @@ export async function runChatWithTools({
 
   const client = new OpenAI({ apiKey });
   const toolDefs = toOpenAITools(tools);
+  // Include OpenAI's native web search tool directly
+  const allToolDefs: any[] = [...toolDefs, { type: 'web_search_preview' }];
   const executed: Array<{ toolName: string; args: any }> = [];
 
   // Use Responses API recommended fields: instructions + input (messages)
@@ -96,7 +98,7 @@ export async function runChatWithTools({
     temperature,
     instructions,
     input: inputMessages as any,
-    tools: toolDefs,
+    tools: allToolDefs,
     parallel_tool_calls: true,
   } as any);
 
@@ -143,7 +145,7 @@ export async function runChatWithTools({
       model,
       previous_response_id: response.id,
       input: outputItems as any,
-      tools: toolDefs,
+      tools: allToolDefs,
       reasoning: { effort: 'high' },
       parallel_tool_calls: true,
     } as any);
