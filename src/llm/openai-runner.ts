@@ -154,6 +154,27 @@ export async function runChatWithTools({
       console.log(`[LLM] follow-up status=${response?.status}`);
     } catch {}
   }
+  // Enforced final write-only pass (no tools) to improve formatting
+  try {
+    const finalizeNote = [
+      'FINALIZE OUTPUT — Strict Formatting:',
+      '- If any Polygon-derived data (quotes, OHLC/aggregates, options) is present, START with a GitHub-style markdown table.',
+      '- Include the header row AND the dashed separator line immediately below it.',
+      '- Do not wrap tables in code fences. Do not use ASCII/box-drawing tables.',
+      '- Use markdown pipes with a dashed separator line; keep decimals consistent.',
+    ].join('\n');
+
+    response = await client.responses.create({
+      model,
+      previous_response_id: response.id,
+      input: [{ type: 'input_text', text: finalizeNote }] as any,
+      // Disable all tools on the finalization pass to prevent further calls
+      tools: [],
+      reasoning: { effort: 'high' },
+      temperature,
+      parallel_tool_calls: false,
+    } as any);
+  } catch {}
 
   const text = extractText(response);
   try {
