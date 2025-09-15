@@ -241,7 +241,14 @@ export default function ChatPage() {
   };
 
   const renderMessage = (content: string) => {
-    // First, let's handle code blocks to prevent table parsing inside them
+    const escapeHtml = (value: string) =>
+      value
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+
     const codeBlockRegex = /```[\s\S]*?```/g;
     const codeBlocks: string[] = [];
     let processedContent = content.replace(codeBlockRegex, (match) => {
@@ -249,82 +256,24 @@ export default function ChatPage() {
       return `__CODE_BLOCK_${codeBlocks.length - 1}__`;
     });
 
-    // Function to detect and parse tables
-    const parseTable = (text: string): string => {
-      // Split into lines
-      const lines = text.split('\n');
-      let result = text;
-      let inTable = false;
-      let tableStart = -1;
-      let tableLines: string[] = [];
-      
-      for (let i = 0; i < lines.length; i++) {
-        const line = lines[i].trim();
-        
-        // Check if this looks like a table separator (contains | and -)
-        if (line.match(/^\|?[\s\-\|:]+\|?$/) && line.includes('-')) {
-          // This is likely a separator line
-          if (i > 0 && lines[i - 1].includes('|')) {
-            // We found a table!
-            inTable = true;
-            tableStart = i - 1;
-            tableLines = [lines[i - 1], line];
-          }
-        } else if (inTable) {
-          if (line.includes('|')) {
-            tableLines.push(line);
-          } else if (line.trim() === '' || !line.includes('|')) {
-            // End of table
-            if (tableLines.length > 2) {
-              const tableHtml = convertTableToHtml(tableLines);
-              const originalTable = tableLines.join('\n');
-              result = result.replace(originalTable, tableHtml);
-            }
-            inTable = false;
-            tableLines = [];
-          }
-        }
-      }
-      
-      // Handle case where table goes to end of content
-      if (inTable && tableLines.length > 2) {
-        const tableHtml = convertTableToHtml(tableLines);
-        const originalTable = tableLines.join('\n');
-        result = result.replace(originalTable, tableHtml);
-      }
-      
-      return result;
-    };
-    
-    // Function to convert table lines to HTML
+    const tableBlocks: string[] = [];
+
     const convertTableToHtml = (lines: string[]): string => {
       let html = '<table>';
       let headerProcessed = false;
-      
-      for (let i = 0; i < lines.length; i++) {
-        const line = lines[i].trim();
-        
-        // Skip separator lines
-        if (line.match(/^\|?[\s\-\|:]+\|?$/)) {
-          continue;
-        }
-        
-        // Parse cells - handle both with and without leading/trailing pipes
-        let cells: string[];
-        if (line.startsWith('|') && line.endsWith('|')) {
-          cells = line.slice(1, -1).split('|').map(cell => cell.trim());
-        } else if (line.includes('|')) {
-          cells = line.split('|').map(cell => cell.trim());
-        } else {
-          continue;
-        }
-        
-        // Remove empty cells
-        cells = cells.filter(cell => cell.length > 0);
-        
+
+      for (const rawLine of lines) {
+        const line = rawLine.trim();
+        if (line.match(/^\|?[\s\-\|:]+\|?$/)) continue;
+
+        const hasEdgePipes = line.startsWith('|') && line.endsWith('|');
+        const cells = (hasEdgePipes ? line.slice(1, -1) : line)
+          .split('|')
+          .map(cell => escapeHtml(cell.trim()))
+          .filter(cell => cell.length > 0);
+
         if (cells.length === 0) continue;
-        
-        // First row with data is header
+
         if (!headerProcessed) {
           html += '<thead><tr>';
           cells.forEach(cell => {
@@ -340,50 +289,103 @@ export default function ChatPage() {
           html += '</tr>';
         }
       }
-      
+
+      if (!headerProcessed) return '<table></table>';
       html += '</tbody></table>';
       return html;
     };
 
-    // Parse tables
-    processedContent = parseTable(processedContent);
+    const extractTables = (text: string): string => {
+      const lines = text.split('\n');
+      let inTable = false;
+      let currentOriginal: string[] = [];
+      let currentTrimmed: string[] = [];
+      let result = text;
 
-    // Helper: try to convert a code block that actually contains a markdown table
-    const tryConvertCodeBlockTable = (block: string): string | null => {
-      let inner = block.trim();
-      const startFence = inner.match(/^```[^\n]*\n?/);
-      if (!startFence) return null;
-      inner = inner.slice(startFence[0].length);
-      if (inner.endsWith('```')) inner = inner.slice(0, -3);
-      inner = inner.trim();
+      const flushTable = () => {
+        if (currentOriginal.length > 0 && currentTrimmed.length > 2) {
+          const originalBlock = currentOriginal.join('\n');
+          const tableHtml = convertTableToHtml(currentTrimmed);
+          const placeholder = `__TABLE_BLOCK_${tableBlocks.length}__`;
+          tableBlocks.push(tableHtml);
+          result = result.replace(originalBlock, placeholder);
+        }
+        currentOriginal = [];
+        currentTrimmed = [];
+        inTable = false;
+      };
 
-      const lines = inner.split('\n').map(l => l.trim());
-      if (lines.length < 2) return null;
-      if (!lines[0].includes('|')) return null;
-      const sep = lines[1];
-      if (!sep || !sep.match(/^\|?[\s\-\|:]+\|?$/) || !sep.includes('-')) return null;
-      const hasData = lines.slice(2).some(l => l.includes('|'));
-      if (!hasData) return null;
+      for (let i = 0; i < lines.length; i++) {
+        const originalLine = lines[i];
+        const trimmedLine = originalLine.trim();
+        const isSeparator = trimmedLine.match(/^\|?[\s\-\|:]+\|?$/) && trimmedLine.includes('-');
 
-      // Treat entire block content as a table
-      const tableHtml = convertTableToHtml(lines);
-      return tableHtml || null;
+        if (isSeparator) {
+          if (!inTable && i > 0 && lines[i - 1].includes('|')) {
+            inTable = true;
+            currentOriginal = [lines[i - 1], originalLine];
+            currentTrimmed = [lines[i - 1].trim(), trimmedLine];
+            continue;
+          }
+
+          if (inTable) {
+            currentOriginal.push(originalLine);
+            currentTrimmed.push(trimmedLine);
+            continue;
+          }
+        }
+
+        if (inTable) {
+          if (trimmedLine.includes('|')) {
+            currentOriginal.push(originalLine);
+            currentTrimmed.push(trimmedLine);
+          } else {
+            flushTable();
+          }
+        }
+      }
+
+      if (inTable) flushTable();
+      return result;
     };
 
-    // Restore code blocks (convert any table-looking code blocks into HTML tables)
-    codeBlocks.forEach((block, index) => {
-      const tableHtml = tryConvertCodeBlockTable(block);
-      const replacement = tableHtml ?? block;
-      processedContent = processedContent.replace(`__CODE_BLOCK_${index}__`, replacement);
-    });
-
-    // Convert other markdown elements
-    processedContent = processedContent
-      .replace(/```(.*?)\n([\s\S]*?)```/g, '<pre><code>$2</code></pre>')
+    processedContent = extractTables(processedContent);
+    processedContent = escapeHtml(processedContent)
       .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
       .replace(/\*(.*?)\*/g, '<em>$1</em>')
       .replace(/`([^`]+)`/g, '<code>$1</code>')
       .replace(/\n/g, '<br />');
+
+    tableBlocks.forEach((html, index) => {
+      processedContent = processedContent.replace(`__TABLE_BLOCK_${index}__`, html);
+    });
+
+    codeBlocks.forEach((block, index) => {
+      let inner = block;
+      const startFence = inner.match(/^```[^\n]*\n?/);
+      if (startFence) inner = inner.slice(startFence[0].length);
+      if (inner.endsWith('```')) inner = inner.slice(0, -3);
+      const innerNoCarriage = inner.replace(/\r/g, '');
+      const trimmedLines = innerNoCarriage.trim().split('\n').map(line => line.trim());
+      const looksLikeTable =
+        trimmedLines.length >= 2 &&
+        trimmedLines[0].includes('|') &&
+        trimmedLines[1] &&
+        trimmedLines[1].match(/^\|?[\s\-\|:]+\|?$/) &&
+        trimmedLines[1].includes('-') &&
+        trimmedLines.slice(2).some(line => line.includes('|'));
+
+      if (looksLikeTable) {
+        const tableHtml = convertTableToHtml(trimmedLines);
+        processedContent = processedContent.replace(`__CODE_BLOCK_${index}__`, tableHtml);
+      } else {
+        const escapedCode = escapeHtml(innerNoCarriage);
+        processedContent = processedContent.replace(
+          `__CODE_BLOCK_${index}__`,
+          `<pre><code>${escapedCode}</code></pre>`
+        );
+      }
+    });
 
     return <div dangerouslySetInnerHTML={{ __html: processedContent }} />;
   };
