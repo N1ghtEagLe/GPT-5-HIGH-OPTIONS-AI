@@ -28,9 +28,9 @@ interface SessionImage {
 }
 
 type ModelId = 'o3-2025-04-16' | 'gpt-5-2025-08-07';
-const MODEL_OPTIONS: Array<{ id: ModelId; label: string; helper: string }> = [
-  { id: 'o3-2025-04-16', label: 'OpenAI o3', helper: 'Faster, good for day-to-day' },
-  { id: 'gpt-5-2025-08-07', label: 'GPT-5 (high reasoning)', helper: 'Slower, deeper analysis' }
+const MODEL_OPTIONS: Array<{ id: ModelId; label: string }> = [
+  { id: 'o3-2025-04-16', label: 'o3' },
+  { id: 'gpt-5-2025-08-07', label: 'GPT-5' }
 ];
 const MODEL_STORAGE_KEY = 'optionsgpt-selected-model';
 
@@ -448,9 +448,30 @@ export default function ChatPage() {
     <div className="chat-container">
       <header className="chat-header">
         <h1>💰 OptionsGPT</h1>
-        <p style={{ marginTop: '0.5rem', color: '#6c757d' }}>
-          Ask me about stock prices, options data, or any market information
-        </p>
+        <div className="chat-header-sub">
+          <p>Ask me about stock prices, options data, or any market information</p>
+          <div className="model-select-group">
+            <select
+              id="model-select"
+              value={model}
+              onChange={(e) => {
+                const next = e.target.value as ModelId;
+                setModel(next);
+                try {
+                  localStorage.setItem(MODEL_STORAGE_KEY, next);
+                } catch (err) {
+                  console.warn('Failed to persist model selection', err);
+                }
+              }}
+              className="model-select"
+              aria-label="Select model"
+            >
+              {MODEL_OPTIONS.map(opt => (
+                <option key={opt.id} value={opt.id}>{opt.label}</option>
+              ))}
+            </select>
+          </div>
+        </div>
       </header>
 
       <div className="chat-messages">
@@ -521,39 +542,6 @@ export default function ChatPage() {
 
       <form onSubmit={handleSubmit} className="chat-input-form">
         <div className="input-wrapper" onDrop={onDrop} onDragOver={onDragOver}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12 }}>
-            <label style={{ fontSize: 12, fontWeight: 600, color: '#6c757d', display: 'flex', alignItems: 'center', gap: 8 }}>
-              Model
-              <select
-                value={model}
-                onChange={(e) => {
-                  const next = e.target.value as ModelId;
-                  setModel(next);
-                  try {
-                    localStorage.setItem(MODEL_STORAGE_KEY, next);
-                  } catch (err) {
-                    console.warn('Failed to persist model selection', err);
-                  }
-                }}
-                style={{
-                  padding: '6px 10px',
-                  borderRadius: 6,
-                  border: '1px solid #ced4da',
-                  background: '#fff',
-                  color: '#212529',
-                  fontSize: 13,
-                }}
-                aria-label="Select model"
-              >
-                {MODEL_OPTIONS.map(opt => (
-                  <option key={opt.id} value={opt.id}>{`${opt.label} – ${opt.helper}`}</option>
-                ))}
-              </select>
-            </label>
-            <span style={{ fontSize: 11, color: '#6c757d' }}>
-              {MODEL_OPTIONS.find(opt => opt.id === model)?.helper ?? ''}
-            </span>
-          </div>
           {attachments.length === 0 && sessionImages.length > 0 && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
               <span style={{ fontSize: 12, color: '#6c757d' }}>Including previous chart</span>
