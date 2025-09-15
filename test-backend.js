@@ -14,8 +14,14 @@ async function testHealth() {
   }
 }
 
+const PIN = process.env.ENTRY_PIN;
+
 async function testChat() {
   console.log('\nTesting chat endpoint...');
+  if (!PIN) {
+    console.error('❌ ENTRY_PIN environment variable is required to test chat endpoint.');
+    return;
+  }
   try {
     const response = await fetch(`${API_URL}/api/chat`, {
       method: 'POST',
@@ -24,7 +30,8 @@ async function testChat() {
       },
       body: JSON.stringify({
         message: "What is Apple's closing price on 2025-01-10?",
-        conversationHistory: []
+        conversationHistory: [],
+        pin: PIN,
       }),
     });
     

@@ -14,7 +14,12 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 
 // Get the PIN from environment variable
-const ENTRY_PIN = process.env.ENTRY_PIN || '12345678';
+const rawEntryPin = process.env.ENTRY_PIN;
+if (!rawEntryPin) {
+  console.error('❌ ENTRY_PIN environment variable is required');
+  process.exit(1);
+}
+const ENTRY_PIN = rawEntryPin;
 
 // Middleware
 app.use(cors({
