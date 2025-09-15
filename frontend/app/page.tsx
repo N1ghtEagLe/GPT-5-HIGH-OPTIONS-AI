@@ -32,7 +32,6 @@ const MODEL_OPTIONS: Array<{ id: ModelId; label: string }> = [
   { id: 'o3-2025-04-16', label: 'o3' },
   { id: 'gpt-5-2025-08-07', label: 'GPT-5' }
 ];
-const MODEL_STORAGE_KEY = 'optionsgpt-selected-model';
 
 export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -66,18 +65,6 @@ export default function ChatPage() {
       textarea.style.height = `${textarea.scrollHeight}px`;
     }
   }, [input]);
-
-  // Load persisted model selection
-  useEffect(() => {
-    try {
-      const stored = localStorage.getItem(MODEL_STORAGE_KEY) as ModelId | null;
-      if (stored && MODEL_OPTIONS.some(opt => opt.id === stored)) {
-        setModel(stored);
-      }
-    } catch (err) {
-      console.warn('Failed to load stored model selection', err);
-    }
-  }, []);
 
   const MAX_ATTACHMENTS = 3;
   const ALLOWED_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp']);
@@ -457,11 +444,6 @@ export default function ChatPage() {
               onChange={(e) => {
                 const next = e.target.value as ModelId;
                 setModel(next);
-                try {
-                  localStorage.setItem(MODEL_STORAGE_KEY, next);
-                } catch (err) {
-                  console.warn('Failed to persist model selection', err);
-                }
               }}
               className="model-select"
               aria-label="Select model"
