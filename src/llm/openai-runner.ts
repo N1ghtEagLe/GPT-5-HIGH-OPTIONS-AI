@@ -33,6 +33,8 @@ export async function runChatWithTools({
     throw new Error('OpenAI API key not configured');
   }
 
+  const supportsReasoning = model.startsWith('gpt-5');
+
   // Sanitize messages to role/content only
   const sanitized = messages.map((m: any) => ({ role: m.role, content: m.content })) as ChatMessage[];
 
@@ -92,15 +94,19 @@ export async function runChatWithTools({
     if (instructions) console.log(`[LLM] instructions length=${instructions.length}`);
   } catch {}
 
-  let response: any = await client.responses.create({
+  const initialRequest: any = {
     model,
-    reasoning: { effort: 'high' },
     temperature,
     instructions,
     input: inputMessages as any,
     tools: allToolDefs,
     parallel_tool_calls: true,
-  } as any);
+  };
+  if (supportsReasoning) {
+    initialRequest.reasoning = { effort: 'high' };
+  }
+
+  let response: any = await client.responses.create(initialRequest);
 
   try {
     console.log(`[LLM] initial status=${response?.status}`);
@@ -141,14 +147,18 @@ export async function runChatWithTools({
     }));
 
     rounds++;
-    response = await client.responses.create({
+    const followupRequest: any = {
       model,
       previous_response_id: response.id,
       input: outputItems as any,
       tools: allToolDefs,
-      reasoning: { effort: 'high' },
       parallel_tool_calls: true,
-    } as any);
+    };
+    if (supportsReasoning) {
+      followupRequest.reasoning = { effort: 'high' };
+    }
+
+    response = await client.responses.create(followupRequest);
 
     try {
       console.log(`[LLM] follow-up status=${response?.status}`);
@@ -164,16 +174,20 @@ export async function runChatWithTools({
       '- Use markdown pipes with a dashed separator line; keep decimals consistent.',
     ].join('\n');
 
-    response = await client.responses.create({
+    const finalizeRequest: any = {
       model,
       previous_response_id: response.id,
       input: [{ type: 'input_text', text: finalizeNote }] as any,
       // Disable all tools on the finalization pass to prevent further calls
       tools: [],
-      reasoning: { effort: 'high' },
       temperature,
       parallel_tool_calls: false,
-    } as any);
+    };
+    if (supportsReasoning) {
+      finalizeRequest.reasoning = { effort: 'high' };
+    }
+
+    response = await client.responses.create(finalizeRequest);
   } catch {}
 
   const text = extractText(response);

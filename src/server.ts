@@ -55,10 +55,12 @@ app.post('/api/auth', (req, res) => {
 });
 
 // Main chat endpoint
+const ALLOWED_MODELS = new Set(['o3-2025-04-16', 'gpt-5-2025-08-07']);
+
 app.post('/api/chat', async (req, res) => {
   try {
     // Extract message, conversation history, and PIN from request
-    const { message, conversationHistory = [], pin } = req.body;
+    const { message, conversationHistory = [], pin, model } = req.body;
     console.log(`[HTTP] /api/chat received. history=${conversationHistory?.length || 0}, messageLen=${(message||'').length}`);
     
     // Verify PIN for each request (security measure)
@@ -346,8 +348,11 @@ PLEASE DO NOT FORGET THAT WHEN YOU ARE RETURNING PRICES FOR OPTIONS OR STOCKS, I
     const tools = { ...polygonTools } as const;
 
     // Generate response using OpenAI Responses API with tool loop
+    const requestedModel = typeof model === 'string' ? model : '';
+    const selectedModel = ALLOWED_MODELS.has(requestedModel) ? requestedModel : 'gpt-5-2025-08-07';
+
     const result = await runChatWithTools({
-      model: 'gpt-5-2025-08-07',
+      model: selectedModel,
       messages: messages as any,
       temperature: 1,
       tools: tools as any,
@@ -359,10 +364,11 @@ PLEASE DO NOT FORGET THAT WHEN YOU ARE RETURNING PRICES FOR OPTIONS OR STOCKS, I
     const responseData = {
       response: result.text,
       toolCalls: (result.toolCalls || []).map(tc => ({ toolName: tc.toolName, args: tc.args })),
-      usage: result.usage
+      usage: result.usage,
+      model: selectedModel
     };
 
-    console.log(`[HTTP] /api/chat result. toolCalls=${responseData.toolCalls.length}, textLen=${responseData.response?.length || 0}`);
+    console.log(`[HTTP] /api/chat result. model=${selectedModel}, toolCalls=${responseData.toolCalls.length}, textLen=${responseData.response?.length || 0}`);
     if (!responseData.response || responseData.response.length === 0) {
       console.log('[HTTP] Warning: empty assistant text returned');
     }

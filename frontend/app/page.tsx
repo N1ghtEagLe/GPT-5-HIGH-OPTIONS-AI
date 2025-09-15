@@ -7,6 +7,7 @@ interface Message {
   content: string;
   toolCalls?: Array<{ toolName: string; args: any }>;
   images?: Array<{ previewUrl: string; mimeType: string }>;
+  modelUsed?: string;
 }
 
 type AttachmentStatus = 'processing' | 'ready' | 'error';
@@ -26,6 +27,13 @@ interface SessionImage {
   dataBase64: string;
 }
 
+type ModelId = 'o3-2025-04-16' | 'gpt-5-2025-08-07';
+const MODEL_OPTIONS: Array<{ id: ModelId; label: string; helper: string }> = [
+  { id: 'o3-2025-04-16', label: 'OpenAI o3', helper: 'Faster, good for day-to-day' },
+  { id: 'gpt-5-2025-08-07', label: 'GPT-5 (high reasoning)', helper: 'Slower, deeper analysis' }
+];
+const MODEL_STORAGE_KEY = 'optionsgpt-selected-model';
+
 export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
@@ -38,6 +46,7 @@ export default function ChatPage() {
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [attachError, setAttachError] = useState('');
   const [sessionImages, setSessionImages] = useState<SessionImage[]>([]);
+  const [model, setModel] = useState<ModelId>('o3-2025-04-16');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -57,6 +66,18 @@ export default function ChatPage() {
       textarea.style.height = `${textarea.scrollHeight}px`;
     }
   }, [input]);
+
+  // Load persisted model selection
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(MODEL_STORAGE_KEY) as ModelId | null;
+      if (stored && MODEL_OPTIONS.some(opt => opt.id === stored)) {
+        setModel(stored);
+      }
+    } catch (err) {
+      console.warn('Failed to load stored model selection', err);
+    }
+  }, []);
 
   const MAX_ATTACHMENTS = 3;
   const ALLOWED_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp']);
@@ -206,6 +227,7 @@ export default function ChatPage() {
           conversationHistory: messages,
           pin: authenticatedPin, // Use the stored authenticated PIN
           images: payloadImages.length > 0 ? payloadImages : undefined,
+          model,
         }),
       });
 
@@ -220,6 +242,7 @@ export default function ChatPage() {
         role: 'assistant',
         content: data.response,
         toolCalls: data.toolCalls,
+        modelUsed: data.model,
       }]);
     } catch (error) {
       console.error('Error:', error);
@@ -442,7 +465,7 @@ export default function ChatPage() {
                   ))}
                 </div>
               )}
-              {message.role === 'assistant' && message.toolCalls && message.toolCalls.length > 0 && (
+              {message.role === 'assistant' && ((message.toolCalls?.length || 0) > 0 || !!message.modelUsed) && (
                 <>
                   <div
                     onClick={() => setExpandedTools((prev) => ({ ...prev, [index]: !prev[index] }))}
@@ -454,20 +477,30 @@ export default function ChatPage() {
                       color: '#6c757d',
                       userSelect: 'none',
                     }}
-                    aria-label={expandedTools[index] ? 'Hide tool calls' : 'Show tool calls'}
-                    title={expandedTools[index] ? 'Hide tool calls' : 'Show tool calls'}
+                    aria-label={expandedTools[index] ? 'Hide response details' : 'Show response details'}
+                    title={expandedTools[index] ? 'Hide response details' : 'Show response details'}
                   >
                     <span style={{ fontSize: '16px' }}>{expandedTools[index] ? '▴' : '▾'}</span>
                   </div>
                   {expandedTools[index] && (
                     <div className="tool-calls" style={{ marginTop: '8px' }}>
-                      <div style={{ fontWeight: 600, marginBottom: '6px' }}>🔧 Market data retrieved:</div>
-                      {message.toolCalls.map((toolCall, idx) => (
-                        <div key={idx} className="tool-call" style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#495057' }}>
-                          <span className="tool-icon">✓</span>
-                          <span>{toolCall.toolName}</span>
+                      {message.modelUsed && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#495057', marginBottom: message.toolCalls && message.toolCalls.length > 0 ? 8 : 0 }}>
+                          <span style={{ fontWeight: 600 }}>🧠 Model:</span>
+                          <span>{message.modelUsed}</span>
                         </div>
-                      ))}
+                      )}
+                      {message.toolCalls && message.toolCalls.length > 0 && (
+                        <>
+                          <div style={{ fontWeight: 600, marginBottom: '6px' }}>🔧 Market data retrieved:</div>
+                          {message.toolCalls.map((toolCall, idx) => (
+                            <div key={idx} className="tool-call" style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#495057' }}>
+                              <span className="tool-icon">✓</span>
+                              <span>{toolCall.toolName}</span>
+                            </div>
+                          ))}
+                        </>
+                      )}
                     </div>
                   )}
                 </>
@@ -488,6 +521,39 @@ export default function ChatPage() {
 
       <form onSubmit={handleSubmit} className="chat-input-form">
         <div className="input-wrapper" onDrop={onDrop} onDragOver={onDragOver}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12 }}>
+            <label style={{ fontSize: 12, fontWeight: 600, color: '#6c757d', display: 'flex', alignItems: 'center', gap: 8 }}>
+              Model
+              <select
+                value={model}
+                onChange={(e) => {
+                  const next = e.target.value as ModelId;
+                  setModel(next);
+                  try {
+                    localStorage.setItem(MODEL_STORAGE_KEY, next);
+                  } catch (err) {
+                    console.warn('Failed to persist model selection', err);
+                  }
+                }}
+                style={{
+                  padding: '6px 10px',
+                  borderRadius: 6,
+                  border: '1px solid #ced4da',
+                  background: '#fff',
+                  color: '#212529',
+                  fontSize: 13,
+                }}
+                aria-label="Select model"
+              >
+                {MODEL_OPTIONS.map(opt => (
+                  <option key={opt.id} value={opt.id}>{`${opt.label} – ${opt.helper}`}</option>
+                ))}
+              </select>
+            </label>
+            <span style={{ fontSize: 11, color: '#6c757d' }}>
+              {MODEL_OPTIONS.find(opt => opt.id === model)?.helper ?? ''}
+            </span>
+          </div>
           {attachments.length === 0 && sessionImages.length > 0 && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
               <span style={{ fontSize: 12, color: '#6c757d' }}>Including previous chart</span>
