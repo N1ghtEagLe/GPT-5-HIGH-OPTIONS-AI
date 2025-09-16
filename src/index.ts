@@ -2,6 +2,7 @@ import { runChatWithTools } from './llm/openai-runner.js';
 import * as readline from 'readline';
 import dotenv from 'dotenv';
 import { polygonTools } from './tools/polygon-tools.js';
+import { chartTools } from './tools/chart-tool.js';
 
 // Load environment variables from .env file
 dotenv.config();
@@ -11,6 +12,8 @@ const DEBUG_MODE = false;
 
 // Set debug mode as environment variable for tools to access
 process.env.DEBUG_MODE = DEBUG_MODE.toString();
+
+const AVAILABLE_TOOLS = { ...polygonTools, ...chartTools } as const;
 
 // Main function to run the chat with tools
 async function main() {
@@ -54,7 +57,7 @@ async function main() {
 
   // Debug: Log available tools
   if (DEBUG_MODE) {
-    console.log('🔧 Available tools:', Object.keys(polygonTools));
+    console.log('🔧 Available tools:', Object.keys(AVAILABLE_TOOLS));
     console.log('');
   }
 
@@ -101,7 +104,7 @@ async function main() {
         if (DEBUG_MODE) {
           console.log('🔍 Debug - Request details:');
           console.log(`   Prompt: "${input}"`);
-          console.log(`   Tools provided: ${Object.keys(polygonTools).join(', ')}`);
+          console.log(`   Tools provided: ${Object.keys(AVAILABLE_TOOLS).join(', ')}`);
           console.log(`   Message history length: ${messages.length}`);
           console.log('');
         }
@@ -171,6 +174,7 @@ Tool usage guidelines:
 - Always summarize the results clearly, mentioning any tickers that failed to retrieve data
 - When users ask about options with relative dates (e.g., "next Friday"), calculate the actual expiration date first
 - IMPORTANT: After receiving tool results, you MUST format and present the data. Never leave the response empty.
+- To render charts from the data you've already retrieved, call the 'renderChart' tool. Default chart type is 'line'; set chartType to 'bar' when needed. Provide a single array of x-axis values plus aligned series arrays, and mark any secondary-axis series with axis: 'right'. Mention the chart in your response so the user knows it was produced.
 - if a user asks for an at the money (or atm) option, for the purposes of the tool call, treat it as a 0% otm option. when looking up calls, select the nearest strike above todays price. when looking up puts, select the nearest strike below todays price.
 
 Browsing and data sourcing rules:
@@ -220,7 +224,7 @@ Data presentation rules:
           currentMessages.push(userMessage);
 
           // Merge tools (Polygon for market data). Web search is provided natively by OpenAI.
-          const tools = { ...polygonTools } as const;
+          const tools = AVAILABLE_TOOLS;
 
           // Generate text using OpenAI Responses API with tool loop
           const result = await runChatWithTools({

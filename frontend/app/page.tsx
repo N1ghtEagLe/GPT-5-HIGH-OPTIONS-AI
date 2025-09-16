@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
+import ChartCard, { type ChartMessageChart } from './components/ChartCard';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -8,6 +9,7 @@ interface Message {
   toolCalls?: Array<{ toolName: string; args: any }>;
   images?: Array<{ previewUrl: string; mimeType: string }>;
   modelUsed?: string;
+  charts?: ChartMessageChart[];
 }
 
 type AttachmentStatus = 'processing' | 'ready' | 'error';
@@ -230,6 +232,7 @@ export default function ChatPage() {
         content: data.response,
         toolCalls: data.toolCalls,
         modelUsed: data.model,
+        charts: Array.isArray(data.charts) ? data.charts : undefined,
       }]);
     } catch (error) {
       console.error('Error:', error);
@@ -461,6 +464,13 @@ export default function ChatPage() {
           <div key={index} className={`message message-${message.role}`}>
             <div className="message-content">
               {renderMessage(message.content)}
+              {message.charts && message.charts.length > 0 && (
+                <div className="message-charts">
+                  {message.charts.map((chart, i) => (
+                    <ChartCard key={chart.id || `chart-${index}-${i}`} chart={chart} />
+                  ))}
+                </div>
+              )}
               {message.images && message.images.length > 0 && (
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
                   {message.images.map((img, i) => (

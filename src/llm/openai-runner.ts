@@ -42,7 +42,7 @@ export async function runChatWithTools({
   const toolDefs = toOpenAITools(tools);
   // Include OpenAI's native web search tool directly
   const allToolDefs: any[] = [...toolDefs, { type: 'web_search_preview' }];
-  const executed: Array<{ toolName: string; args: any }> = [];
+  const executed: Array<{ toolName: string; args: any; output?: any }> = [];
 
   // Use Responses API recommended fields: instructions + input (messages)
   let instructions: string | undefined;
@@ -124,7 +124,6 @@ export async function runChatWithTools({
       try {
         console.log(`[LLM] tool_call: ${name}(${truncate(JSON.stringify(args), 300)})`);
       } catch {}
-      executed.push({ toolName: name, args });
       const tool = tools[name];
       let result: any;
       try {
@@ -133,6 +132,7 @@ export async function runChatWithTools({
       } catch (err: any) {
         result = { error: true, message: err?.message || String(err) };
       }
+      executed.push({ toolName: name, args, output: result });
       const outputStr = typeof result === 'string' ? result : JSON.stringify(result);
       try {
         console.log(`[LLM] tool_result: ${name} -> ${truncate(outputStr, 300)}`);

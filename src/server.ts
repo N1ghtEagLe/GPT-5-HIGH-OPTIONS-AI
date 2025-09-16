@@ -4,6 +4,7 @@ import bodyParser from 'body-parser';
 import { runChatWithTools } from './llm/openai-runner.js';
 import dotenv from 'dotenv';
 import { polygonTools } from './tools/polygon-tools.js';
+import { chartTools } from './tools/chart-tool.js';
 // Note: Native OpenAI web search is used directly via the Responses API
 
 // Load environment variables
@@ -152,6 +153,7 @@ Tool usage guidelines:
 - Always summarize the results clearly, mentioning any tickers that failed to retrieve data
 - When users ask about options with relative dates (e.g., "next Friday"), calculate the actual expiration date first
 - IMPORTANT: After receiving tool results, you MUST format and present the data. Never leave the response empty.
+- To render charts from the data you've already retrieved, call the 'renderChart' tool. Default chart type is 'line'; set chartType to 'bar' when needed. Provide a single array of x-axis values plus one or more series (each aligned to the x-axis). Use the axis field set to 'right' when a series belongs on the secondary Y-axis. Mention the chart in your narrative so the user knows it was produced.
 
 ### TRADE FINDER MODE — Model-Decides Variant (Optimization-First)
 
@@ -349,7 +351,7 @@ PLEASE DO NOT FORGET THAT WHEN YOU ARE RETURNING PRICES FOR OPTIONS OR STOCKS, I
     messages.push({ role: 'user', content: message });
 
     // Merge tools (Polygon for market data). Web search is provided natively by OpenAI.
-    const tools = { ...polygonTools } as const;
+    const tools = { ...polygonTools, ...chartTools } as const;
 
     // Generate response using OpenAI Responses API with tool loop
     const requestedModel = typeof model === 'string' ? model : '';
@@ -365,9 +367,18 @@ PLEASE DO NOT FORGET THAT WHEN YOU ARE RETURNING PRICES FOR OPTIONS OR STOCKS, I
     });
 
     // Prepare response data
+    const toolCalls = (result.toolCalls || []).map(tc => ({ toolName: tc.toolName, args: tc.args }));
+    const charts = (result.toolCalls || [])
+      .filter(tc => tc.toolName === 'renderChart' && tc.output && !(tc.output?.error))
+      .map((tc, idx) => ({
+        id: `chart-${Date.now()}-${idx}`,
+        ...(tc.output as Record<string, unknown>),
+      }));
+
     const responseData = {
       response: result.text,
-      toolCalls: (result.toolCalls || []).map(tc => ({ toolName: tc.toolName, args: tc.args })),
+      toolCalls,
+      charts,
       usage: result.usage,
       model: selectedModel
     };
