@@ -149,6 +149,21 @@ const toEChartsOption = (input: z.infer<typeof chartInputSchema>) => {
     axisPointer: { type: chartType === 'bar' ? 'shadow' : 'cross' },
   };
 
+  const legendOption: Record<string, unknown> = {
+    data: legendData,
+    icon: 'circle',
+    bottom: 12,
+    left: 'center',
+    itemHeight: 10,
+    itemWidth: 10,
+    itemGap: 12,
+    textStyle: {
+      color: '#495057',
+      fontSize: 12,
+      padding: [4, 0, 0, 0],
+    },
+  };
+
   const palette = ['#3b82f6', '#22c55e', '#f97316', '#a855f7', '#ef4444'];
 
   const seriesOptions = series.map((entry, idx) => {
@@ -195,8 +210,8 @@ const toEChartsOption = (input: z.infer<typeof chartInputSchema>) => {
     animation: false,
     color: palette,
     tooltip: tooltipOption,
-    legend: { data: legendData, top: 24, icon: 'circle' },
-    grid: { left: 56, right: rightAxisUsed ? 64 : 32, top: gridTop, bottom: 48 },
+    legend: legendOption,
+    grid: { left: 56, right: rightAxisUsed ? 64 : 32, top: gridTop, bottom: 84 },
     xAxis: xAxisOption,
     yAxis: yAxisOptions,
     series: seriesOptions,

@@ -107,8 +107,8 @@ export function ChartCard({ chart }: ChartCardProps) {
 
   const height = useMemo(() => {
     const seriesCount = Array.isArray(chart.spec?.series) ? chart.spec.series.length : 1;
-    const base = seriesCount > 2 ? 320 + (seriesCount - 2) * 24 : 320;
-    return Math.max(280, Math.min(base, 440));
+    const base = seriesCount > 2 ? 360 + (seriesCount - 2) * 24 : 360;
+    return Math.max(320, Math.min(base, 480));
   }, [chart.spec]);
 
   return (
