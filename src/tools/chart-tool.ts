@@ -119,11 +119,12 @@ const toEChartsOption = (input: z.infer<typeof chartInputSchema>) => {
     boundaryGap: chartType === 'bar',
     axisLine: { lineStyle: { color: '#adb5bd' } },
     axisLabel: { color: '#495057' },
-    nameGap: 28,
+    nameLocation: 'middle',
+    nameGap: 36,
     nameTextStyle: {
       color: '#495057',
       fontSize: 12,
-      padding: [8, 0, 0, 0],
+      padding: [6, 0, 0, 0],
     },
   };
 
