@@ -27,6 +27,20 @@ const axisLabelSchema = z.object({
   unit: z.string().trim().max(32).optional(),
 });
 
+const strikeArrangementSchema = z.object({
+  kind: z.literal('strike'),
+  optionOrientation: z.enum(['calls-otm-right', 'puts-otm-right']),
+});
+
+const customArrangementSchema = z.object({
+  kind: z.literal('custom'),
+  sortOrder: z.enum(['asc', 'desc']),
+});
+
+const arrangementSchema = z
+  .union([strikeArrangementSchema, customArrangementSchema, z.string()])
+  .optional();
+
 const chartInputSchema = z.object({
   title: z.string().trim().max(180).optional(),
   subtitle: z.string().trim().max(220).optional(),
@@ -35,6 +49,7 @@ const chartInputSchema = z.object({
     label: z.string().trim().max(120).optional(),
     valueType: axisValueTypeSchema,
     values: z.array(z.union([z.string(), z.number()])).min(2),
+    arrangement: arrangementSchema,
   }),
   series: z.array(seriesSchema).min(1).max(MAX_SERIES),
   yAxes: z
@@ -49,6 +64,62 @@ const chartInputSchema = z.object({
     })
     .optional(),
 });
+
+type ChartInput = z.infer<typeof chartInputSchema>;
+type NormalizedSeriesEntry = Omit<ChartInput['series'][number], 'data'> & {
+  data: Array<number | null>;
+};
+type ChartExecutionInput = Omit<ChartInput, 'series'> & {
+  series: NormalizedSeriesEntry[];
+};
+type StrikeArrangement = z.infer<typeof strikeArrangementSchema>;
+type CustomArrangement = z.infer<typeof customArrangementSchema>;
+type RecognizedArrangement = StrikeArrangement | CustomArrangement;
+
+const normalizeArrangement = (
+  input: ChartInput['xAxis']['arrangement']
+): RecognizedArrangement | null => {
+  if (!input) return null;
+
+  if (typeof input === 'object') {
+    const candidate = input as Record<string, unknown>;
+    const kind = candidate.kind;
+    if (kind === 'strike') {
+      const orientation = candidate.optionOrientation;
+      if (orientation === 'calls-otm-right' || orientation === 'puts-otm-right') {
+        return { kind: 'strike', optionOrientation: orientation };
+      }
+      return null;
+    }
+    if (kind === 'custom') {
+      const order = candidate.sortOrder;
+      if (order === 'asc' || order === 'desc') {
+        return { kind: 'custom', sortOrder: order };
+      }
+      return null;
+    }
+    return null;
+  }
+
+  if (typeof input === 'string') {
+    const normalized = input.trim().toLowerCase();
+    if (normalized === 'calls-otm-right' || normalized === 'calls') {
+      return { kind: 'strike', optionOrientation: 'calls-otm-right' };
+    }
+    if (normalized === 'puts-otm-right' || normalized === 'puts') {
+      return { kind: 'strike', optionOrientation: 'puts-otm-right' };
+    }
+    if (normalized === 'asc' || normalized === 'ascending') {
+      return { kind: 'custom', sortOrder: 'asc' };
+    }
+    if (normalized === 'desc' || normalized === 'descending') {
+      return { kind: 'custom', sortOrder: 'desc' };
+    }
+    return null;
+  }
+
+  return null;
+};
 
 const buildAxisName = (axis?: { label?: string; unit?: string }) => {
   if (!axis) return undefined;
@@ -90,43 +161,6 @@ const extractNumericValue = (input: string | number): number | null => {
   return Number.isFinite(parsed) ? parsed : null;
 };
 
-const detectStrikeAxisValues = (values: Array<string | number>) => {
-  if (values.length < 2) return null;
-  const numeric = values.map(v => extractNumericValue(typeof v === 'number' ? v : String(v).trim()));
-  if (numeric.some(v => v === null || !Number.isFinite(v as number))) return null;
-  const numbers = numeric as number[];
-  if (numbers.some(v => v <= 0)) return null;
-  if (new Set(numbers.map(v => v.toFixed(4))).size < 2) return null;
-  return numbers;
-};
-
-const inferStrikeSortDirection = (
-  series: Array<{ name: string; data: Array<number | null> }>,
-  numericValues: number[]
-): 'asc' | 'desc' => {
-  const lowerNames = series.map(s => s.name.toLowerCase());
-  const hasPut = lowerNames.some(name => name.includes('put'));
-  const hasCall = lowerNames.some(name => name.includes('call'));
-  if (hasPut && !hasCall) return 'desc';
-  if (hasCall && !hasPut) return 'asc';
-
-  for (const entry of series) {
-    const lower = entry.name.toLowerCase();
-    if (lower.includes('delta')) {
-      const first = entry.data.find(value => typeof value === 'number' && Number.isFinite(value));
-      if (typeof first === 'number') {
-        if (first < 0) return 'desc';
-        if (first > 0) return 'asc';
-      }
-    }
-  }
-
-  const monotonicAsc = numericValues.every((value, idx, arr) => idx === 0 || arr[idx - 1] <= value);
-  const monotonicDesc = numericValues.every((value, idx, arr) => idx === 0 || arr[idx - 1] >= value);
-  if (monotonicDesc && !monotonicAsc) return 'desc';
-  return 'asc';
-};
-
 const toPairData = (xValues: Array<string | number>, data: Array<number | null>) =>
   xValues.map((x, idx) => {
     const y = data[idx];
@@ -159,7 +193,7 @@ const computeXRange = (valueType: 'datetime' | 'category' | 'numeric', values: A
   return { min: values[0], max: values[values.length - 1] };
 };
 
-const toEChartsOption = (input: z.infer<typeof chartInputSchema>) => {
+const toEChartsOption = (input: ChartExecutionInput) => {
   const { chartType, xAxis, series, yAxes, title, subtitle, tooltip } = input;
   const rightAxisUsed = detectRightAxisUsage(series);
 
@@ -291,7 +325,7 @@ const chartToolExecute: ToolSpec['execute'] = async (args: unknown) => {
   }
 
   const payload = parsed.data;
-  const normalizedSeries = payload.series.map(series => ({
+  const normalizedSeries: NormalizedSeriesEntry[] = payload.series.map(series => ({
     ...series,
     data: normalizeSeriesData(payload.xAxis.values.length, series.data),
   }));
@@ -305,30 +339,76 @@ const chartToolExecute: ToolSpec['execute'] = async (args: unknown) => {
   }
 
   let adjustedXAxis = { ...payload.xAxis };
-  let adjustedSeries = normalizedSeries;
+  let adjustedSeries: NormalizedSeriesEntry[] = normalizedSeries;
 
-  const strikeNumbers = payload.xAxis.valueType === 'datetime' ? null : detectStrikeAxisValues(payload.xAxis.values);
-  if (strikeNumbers) {
-    const direction = inferStrikeSortDirection(normalizedSeries, strikeNumbers);
-    const indexed = strikeNumbers.map((value, idx) => ({ value, idx }));
-    indexed.sort((a, b) => (direction === 'asc' ? a.value - b.value : b.value - a.value));
-    const seen = new Set<number>();
-    const sortedIndices: number[] = [];
-    for (const item of indexed) {
-      if (!seen.has(item.idx)) {
-        seen.add(item.idx);
-        sortedIndices.push(item.idx);
-      }
-    }
-    adjustedXAxis = {
-      ...adjustedXAxis,
-      valueType: 'category',
-      values: sortedIndices.map(i => payload.xAxis.values[i]),
+  const rawArrangement = payload.xAxis.arrangement;
+  const arrangement = normalizeArrangement(rawArrangement);
+
+  if (!arrangement && rawArrangement && typeof rawArrangement === 'object') {
+    return {
+      error: true,
+      message: 'Invalid x-axis arrangement configuration',
     };
-    adjustedSeries = adjustedSeries.map(entry => ({
-      ...entry,
-      data: sortedIndices.map(i => entry.data[i]),
-    }));
+  }
+
+  if (arrangement) {
+    const sortedIndices = payload.xAxis.values.map((_, idx) => idx);
+
+    if (arrangement.kind === 'strike') {
+      const numericValues = payload.xAxis.values.map((raw, idx) =>
+        extractNumericValue(typeof raw === 'number' ? raw : String(raw).trim())
+      );
+
+      if (numericValues.some(value => value === null)) {
+        return {
+          error: true,
+          message: 'Strike arrangement requested but strike values could not be parsed as positive numbers',
+        };
+      }
+
+      const desiredDirection = arrangement.optionOrientation === 'calls-otm-right' ? 'asc' : 'desc';
+      sortedIndices.sort((a, b) =>
+        desiredDirection === 'asc'
+          ? (numericValues[a] as number) - (numericValues[b] as number)
+          : (numericValues[b] as number) - (numericValues[a] as number)
+      );
+
+      adjustedXAxis = {
+        ...adjustedXAxis,
+        valueType: 'category',
+        values: sortedIndices.map(i => payload.xAxis.values[i]),
+      };
+      adjustedSeries = adjustedSeries.map<NormalizedSeriesEntry>(entry => ({
+        ...entry,
+        data: sortedIndices.map(i => entry.data[i]),
+      }));
+    } else {
+      const { sortOrder } = arrangement;
+      const compareValues = (aIdx: number, bIdx: number) => {
+        const aValue = payload.xAxis.values[aIdx];
+        const bValue = payload.xAxis.values[bIdx];
+
+        if (typeof aValue === 'number' && typeof bValue === 'number') {
+          return sortOrder === 'asc' ? aValue - bValue : bValue - aValue;
+        }
+
+        const aText = String(aValue);
+        const bText = String(bValue);
+        const comparison = aText.localeCompare(bText, undefined, { sensitivity: 'base', numeric: true });
+        return sortOrder === 'asc' ? comparison : -comparison;
+      };
+
+      sortedIndices.sort(compareValues);
+      adjustedXAxis = {
+        ...adjustedXAxis,
+        valueType: 'category',
+        values: sortedIndices.map(i => payload.xAxis.values[i]),
+      };
+      adjustedSeries = adjustedSeries.map<NormalizedSeriesEntry>(entry => ({
+        ...entry,
+        data: sortedIndices.map(i => entry.data[i]),
+      }));
+    }
   }
 
   const option = toEChartsOption({ ...payload, xAxis: adjustedXAxis, series: adjustedSeries });
