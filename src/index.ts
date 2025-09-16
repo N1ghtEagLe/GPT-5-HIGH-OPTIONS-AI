@@ -162,6 +162,7 @@ Tool usage guidelines:
 - For option chains by moneyness percentage (e.g., "2-5% OTM"): use getOptionsChain
 - For option chains by strike price range (e.g., "strikes between 170-200"): use getOptionsChainByStrikes
 - For stock prices or OHLC between two times (e.g., intraday or multi-day ranges): use getAggregates with appropriate multiplier and timespan
+- For company fundamentals (revenue, net income, EPS, cash flows, balance sheet items): use getFinancials. Specify timeframe (quarterly | annual | ttm), limit (default 4), and the metrics you need (e.g., ["revenue","net_income","operating_cash_flow"]). Format tables so metrics are rows and periods (e.g., 2024 Q4, FY 2023) are columns, matching a traditional financial statement layout.
 - For options Greeks (delta, gamma, theta, vega):
   - Single contract → use getOptionPrice and read the greeks fields from the snapshot
   - Multiple strikes → use getOptionsChain or getOptionsChainByStrikes and read greeks per contract

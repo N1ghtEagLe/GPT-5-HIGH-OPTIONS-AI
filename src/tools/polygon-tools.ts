@@ -1,5 +1,11 @@
 import { z } from 'zod';
 import { restClient } from '@polygon.io/client-js';
+import {
+  FINANCIAL_METRICS,
+  FINANCIAL_STATEMENTS,
+  financialStatementSchema,
+  type FinancialMetricDefinition,
+} from './helpers/financial-metrics.js';
 
 // Get debug mode from environment or default to false
 const DEBUG_MODE = process.env.DEBUG_MODE === 'true';
@@ -7,6 +13,53 @@ const DEBUG_MODE = process.env.DEBUG_MODE === 'true';
 // Helper function for debug logging
 const debugLog = (...args: any[]) => {
   if (DEBUG_MODE) console.log(...args);
+};
+
+const DEFAULT_FINANCIAL_METRICS = [
+  'revenue',
+  'net_income',
+  'eps_diluted',
+  'operating_income',
+  'operating_cash_flow',
+] as const satisfies Array<keyof typeof FINANCIAL_METRICS>;
+
+const MAX_FINANCIAL_RECORDS = 20;
+
+type MetricKey = keyof typeof FINANCIAL_METRICS;
+
+interface MetricValue {
+  label: string;
+  unit: string | null;
+  value: number | null;
+  statement: string;
+  field: string;
+}
+
+const normalizeMetricKey = (key: string) => key.trim().toLowerCase().replace(/[\s-]+/g, '_');
+
+const parseCursorFromNextUrl = (nextUrl?: string | null) => {
+  if (!nextUrl) return undefined;
+  try {
+    const url = new URL(nextUrl);
+    return url.searchParams.get('cursor') || undefined;
+  } catch (error) {
+    debugLog('⚠️ Failed to parse next_url cursor', error);
+    return undefined;
+  }
+};
+
+const collectMetric = (definition: FinancialMetricDefinition, source: any): MetricValue => {
+  const raw = source?.[definition.field] ?? {};
+  const label = typeof raw.label === 'string' && raw.label.trim().length > 0 ? raw.label : definition.label;
+  const value = raw && typeof raw.value === 'number' ? raw.value : null;
+  const unit = typeof raw.unit === 'string' && raw.unit.trim().length > 0 ? raw.unit : definition.unitHint || null;
+  return {
+    label,
+    unit,
+    value,
+    statement: definition.statement,
+    field: definition.field,
+  };
 };
 
 // Tool definition for getting daily open, close, high, and low
@@ -734,6 +787,241 @@ export const polygonTools = {
         };
       }
     }
+  },
+
+  // Company financial statements and metrics
+  getFinancials: {
+    description: [
+      'Retrieve standardized financial statement data (income, balance sheet, cash flow, comprehensive income) for a company. Supports quarterly, annual, or TTM filings and optional metric filtering.',
+      'Recognized metric keys (use in the "metrics" array):',
+      Object.entries(FINANCIAL_METRICS)
+        .map(([key, def]) => `• ${key} (${def.statement} → ${def.field} — ${def.label})`)
+        .join('\n'),
+      'If a user asks which line items are available, list these keys (and mention the statement they map to).',
+      'To retrieve full statements, pass the desired statement names via "statements" (e.g., ["income_statement"]).',
+    ].join('\n'),
+    parameters: z.object({
+      ticker: z.string().min(1).describe('The stock ticker symbol (e.g., MSFT)'),
+      timeframe: z.enum(['quarterly', 'annual', 'ttm']).optional().describe('Statement timeframe. Defaults to quarterly.'),
+      limit: z.number().int().min(1).max(100).optional().describe('Number of filings to return (max 100 per Polygon request; tool caps at 20).'),
+      sort: z.string().optional().describe('Polygon sort field (default period_of_report_date).'),
+      order: z.enum(['asc', 'desc']).optional().describe('Sort order (default desc).'),
+      metrics: z.array(z.string()).optional().describe('Specific metric identifiers to return (e.g., ["revenue","net_income","eps_diluted"]).'),
+      statements: z.array(financialStatementSchema).optional().describe('Statements to include in full form (income_statement, balance_sheet, cash_flow_statement, comprehensive_income).'),
+      reportType: z.string().optional().describe('Filter by SEC report type (e.g., 10-Q, 10-K).'),
+      fiscalPeriod: z.string().optional().describe('Filter by fiscal period (e.g., Q1, Q4, FY).'),
+      fiscalYear: z.union([z.string(), z.number()]).optional().describe('Filter by fiscal year (e.g., 2024).'),
+      filingDateGte: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe('Earliest filing date (YYYY-MM-DD).'),
+      filingDateLte: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe('Latest filing date (YYYY-MM-DD).'),
+      periodOfReportDateGte: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe('Earliest period of report date (YYYY-MM-DD).'),
+      periodOfReportDateLte: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe('Latest period of report date (YYYY-MM-DD).'),
+    }),
+    execute: async ({
+      ticker,
+      timeframe,
+      limit,
+      sort,
+      order,
+      metrics,
+      statements,
+      reportType,
+      fiscalPeriod,
+      fiscalYear,
+      filingDateGte,
+      filingDateLte,
+      periodOfReportDateGte,
+      periodOfReportDateLte,
+    }: {
+      ticker: string;
+      timeframe?: 'quarterly' | 'annual' | 'ttm';
+      limit?: number;
+      sort?: string;
+      order?: 'asc' | 'desc';
+      metrics?: string[];
+      statements?: Array<typeof FINANCIAL_STATEMENTS[number]>;
+      reportType?: string;
+      fiscalPeriod?: string;
+      fiscalYear?: string | number;
+      filingDateGte?: string;
+      filingDateLte?: string;
+      periodOfReportDateGte?: string;
+      periodOfReportDateLte?: string;
+    }) => {
+      console.log(`\n🔍 Tool execution - getFinancials called with:`, {
+        ticker,
+        timeframe,
+        limit,
+        metrics,
+        statements,
+        reportType,
+        fiscalPeriod,
+        fiscalYear,
+      });
+
+      const apiKey = process.env.POLYGON_API_KEY;
+      if (!apiKey) {
+        console.error('❌ Polygon API key not found in environment variables');
+        return {
+          error: true,
+          message: 'Polygon API key not configured',
+          details: 'Please ensure POLYGON_API_KEY is set in your .env file',
+        };
+      }
+
+      const polygonClient = restClient(apiKey);
+      debugLog('✅ Polygon client initialized with API key');
+
+      const requestedLimit = Math.min(Math.max(limit ?? 4, 1), MAX_FINANCIAL_RECORDS);
+      const baseQuery: Record<string, string> = {
+        ticker,
+        limit: String(Math.min(requestedLimit, 100)),
+        sort: sort || 'period_of_report_date',
+        order: order || 'desc',
+      };
+      if (timeframe) baseQuery.timeframe = timeframe;
+      if (reportType) baseQuery.report_type = reportType;
+      if (fiscalPeriod) baseQuery.fiscal_period = fiscalPeriod;
+      if (typeof fiscalYear !== 'undefined') baseQuery.fiscal_year = String(fiscalYear);
+      if (filingDateGte) baseQuery['filing_date.gte'] = filingDateGte;
+      if (filingDateLte) baseQuery['filing_date.lte'] = filingDateLte;
+      if (periodOfReportDateGte) baseQuery['period_of_report_date.gte'] = periodOfReportDateGte;
+      if (periodOfReportDateLte) baseQuery['period_of_report_date.lte'] = periodOfReportDateLte;
+
+      const metricPairs = Array.isArray(metrics)
+        ? metrics
+            .map((key) => ({ raw: String(key), normalized: normalizeMetricKey(String(key)) }))
+            .filter((item) => item.normalized.length > 0)
+        : [];
+      const seenMetricKeys = new Set<string>();
+      const resolvedMetricKeys: MetricKey[] = [];
+      const unrecognizedMetrics: string[] = [];
+      for (const { raw, normalized } of metricPairs) {
+        if (seenMetricKeys.has(normalized)) continue;
+        seenMetricKeys.add(normalized);
+        if (FINANCIAL_METRICS[normalized as MetricKey]) {
+          resolvedMetricKeys.push(normalized as MetricKey);
+        } else {
+          unrecognizedMetrics.push(raw);
+        }
+      }
+
+      const statementFilter = Array.isArray(statements)
+        ? statements.filter((statement): statement is typeof FINANCIAL_STATEMENTS[number] =>
+            FINANCIAL_STATEMENTS.includes(statement)
+          )
+        : [];
+
+      const filings: any[] = [];
+      let cursor: string | undefined;
+      let fetchGuard = 0;
+
+      try {
+        while (filings.length < requestedLimit && fetchGuard < 10) {
+          const query = { ...baseQuery };
+          query.limit = String(Math.min(requestedLimit - filings.length, requestedLimit, 100));
+          if (cursor) {
+            query.cursor = cursor;
+          }
+
+          debugLog('📡 Fetching financials batch with query:', query);
+          const response: any = await polygonClient.reference.stockFinancials(query);
+          const batch = Array.isArray(response?.results) ? response.results : [];
+          filings.push(...batch);
+          if (!response?.next_url || filings.length >= requestedLimit) {
+            break;
+          }
+          cursor = parseCursorFromNextUrl(response.next_url);
+          if (!cursor) break;
+          fetchGuard += 1;
+        }
+      } catch (error: any) {
+        console.error('❌ Failed to fetch financials:', error?.message || error);
+        return {
+          error: true,
+          message: error?.message || 'Failed to fetch financials',
+          details: error,
+        };
+      }
+
+      const limitedResults = filings.slice(0, requestedLimit);
+
+      const usingDefaultMetrics = resolvedMetricKeys.length === 0 && (!metrics || metrics.length === 0);
+      const effectiveMetricKeys: MetricKey[] = resolvedMetricKeys.length > 0
+        ? resolvedMetricKeys
+        : usingDefaultMetrics
+          ? [...DEFAULT_FINANCIAL_METRICS]
+          : [];
+
+      const normalizedFilings = limitedResults.map((entry) => {
+        const financials = entry?.financials || {};
+        const metricData: Record<string, MetricValue> = {};
+
+        for (const metricKey of effectiveMetricKeys) {
+          const definition = FINANCIAL_METRICS[metricKey];
+          const statementData = financials?.[definition.statement] || {};
+          metricData[metricKey] = collectMetric(definition, statementData);
+        }
+
+        const statementDataOutput: Record<string, Record<string, MetricValue>> = {};
+        if (statementFilter.length > 0) {
+          for (const statementKey of statementFilter) {
+            const statementSource = financials?.[statementKey];
+            if (!statementSource || typeof statementSource !== 'object') continue;
+            const rows: Record<string, MetricValue> = {};
+            for (const fieldKey of Object.keys(statementSource)) {
+              const rowSource = statementSource[fieldKey];
+              const label =
+                rowSource && typeof rowSource.label === 'string' && rowSource.label.trim().length > 0
+                  ? rowSource.label
+                  : fieldKey;
+              const unit =
+                rowSource && typeof rowSource.unit === 'string' && rowSource.unit.trim().length > 0
+                  ? rowSource.unit
+                  : null;
+              const value = rowSource && typeof rowSource.value === 'number' ? rowSource.value : null;
+              rows[fieldKey] = {
+                label,
+                unit,
+                value,
+                statement: statementKey,
+                field: fieldKey,
+              };
+            }
+            if (Object.keys(rows).length > 0) {
+              statementDataOutput[statementKey] = rows;
+            }
+          }
+        }
+
+        return {
+          ticker: Array.isArray(entry?.tickers) && entry.tickers.length > 0 ? entry.tickers[0] : ticker,
+          companyName: entry?.company_name || null,
+          filingDate: entry?.filing_date || null,
+          acceptanceDateTime: entry?.acceptance_datetime || null,
+          startDate: entry?.start_date || null,
+          endDate: entry?.end_date || null,
+          periodOfReportDate: entry?.period_of_report_date || null,
+          fiscalPeriod: entry?.fiscal_period || null,
+          fiscalYear: entry?.fiscal_year || null,
+          timeframe: entry?.timeframe || timeframe || null,
+          reportType: entry?.report_type || null,
+          sic: entry?.sic || null,
+          metrics: metricData,
+          statements: Object.keys(statementDataOutput).length > 0 ? statementDataOutput : undefined,
+        };
+      });
+
+      return {
+        ticker,
+        timeframe: timeframe || null,
+        limit: requestedLimit,
+        metrics: effectiveMetricKeys,
+        usedDefaultMetrics: usingDefaultMetrics,
+        statements: statementFilter,
+        unrecognizedMetrics,
+        results: normalizedFilings,
+      };
+    },
   },
 
   // New tool: Get historical aggregates (aggs) between two times
