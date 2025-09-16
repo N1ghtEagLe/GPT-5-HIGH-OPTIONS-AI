@@ -325,7 +325,7 @@ a {
 }
 
 .dark .message-assistant .message-content {
-  background: var(--bg-secondary);
+  background: var(--bg-primary);
   border: 1px solid var(--border-secondary);
 }
 
