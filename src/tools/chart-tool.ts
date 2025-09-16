@@ -10,7 +10,7 @@ const lineStyleSchema = z.enum(['solid', 'dashed', 'dotted']);
 const styleSchema = z.object({
   color: z.string().trim().min(1).optional(),
   lineStyle: lineStyleSchema.optional(),
-  barWidth: z.number().positive().optional(),
+  barWidth: z.number().nonnegative().optional(),
 }).partial();
 
 const dataPointSchema = z.union([z.number(), z.string(), z.null()]);
@@ -75,6 +75,9 @@ type ChartExecutionInput = Omit<ChartInput, 'series'> & {
 type StrikeArrangement = z.infer<typeof strikeArrangementSchema>;
 type CustomArrangement = z.infer<typeof customArrangementSchema>;
 type RecognizedArrangement = StrikeArrangement | CustomArrangement;
+type ChartOptionExtras = {
+  clampNumericXAxis?: boolean;
+};
 
 const normalizeArrangement = (
   input: ChartInput['xAxis']['arrangement']
@@ -102,7 +105,29 @@ const normalizeArrangement = (
   }
 
   if (typeof input === 'string') {
-    const normalized = input.trim().toLowerCase();
+    const trimmed = input.trim();
+
+    if (trimmed.startsWith('{')) {
+      const attempts = [trimmed];
+
+      const quoteKeys = trimmed.replace(/([{,]\s*)([A-Za-z0-9_\-]+)\s*:/g, '$1"$2":');
+      if (quoteKeys !== trimmed) {
+        attempts.push(quoteKeys);
+      }
+
+      for (const candidate of attempts) {
+        try {
+          const parsed = JSON.parse(candidate.replace(/\\"/g, '"'));
+          if (parsed && typeof parsed === 'object') {
+            return normalizeArrangement(parsed as Record<string, unknown> as ChartInput['xAxis']['arrangement']);
+          }
+        } catch (error) {
+          continue;
+        }
+      }
+    }
+
+    const normalized = trimmed.toLowerCase();
     if (normalized === 'calls-otm-right' || normalized === 'calls') {
       return { kind: 'strike', optionOrientation: 'calls-otm-right' };
     }
@@ -193,7 +218,7 @@ const computeXRange = (valueType: 'datetime' | 'category' | 'numeric', values: A
   return { min: values[0], max: values[values.length - 1] };
 };
 
-const toEChartsOption = (input: ChartExecutionInput) => {
+const toEChartsOption = (input: ChartExecutionInput, extras: ChartOptionExtras = {}) => {
   const { chartType, xAxis, series, yAxes, title, subtitle, tooltip } = input;
   const rightAxisUsed = detectRightAxisUsage(series);
 
@@ -211,6 +236,11 @@ const toEChartsOption = (input: ChartExecutionInput) => {
       padding: [6, 0, 0, 0],
     },
   };
+
+  if (extras.clampNumericXAxis && xAxis.valueType === 'numeric') {
+    xAxisOption.min = 'dataMin';
+    xAxisOption.max = 'dataMax';
+  }
 
   const yAxisOptionLeft: Record<string, unknown> = {
     type: 'value',
@@ -340,6 +370,7 @@ const chartToolExecute: ToolSpec['execute'] = async (args: unknown) => {
 
   let adjustedXAxis = { ...payload.xAxis };
   let adjustedSeries: NormalizedSeriesEntry[] = normalizedSeries;
+  let clampNumericXAxis = false;
 
   const rawArrangement = payload.xAxis.arrangement;
   const arrangement = normalizeArrangement(rawArrangement);
@@ -411,7 +442,37 @@ const chartToolExecute: ToolSpec['execute'] = async (args: unknown) => {
     }
   }
 
-  const option = toEChartsOption({ ...payload, xAxis: adjustedXAxis, series: adjustedSeries });
+  if (!arrangement && adjustedXAxis.valueType === 'numeric') {
+    const numericValues = adjustedXAxis.values
+      .map(value => (typeof value === 'number' ? value : Number(value)))
+      .filter(value => Number.isFinite(value)) as number[];
+
+    const hasStrikeCue = Boolean(
+      (adjustedXAxis.label && adjustedXAxis.label.toLowerCase().includes('strike')) ||
+        (payload.title && payload.title.toLowerCase().includes('strike')) ||
+        (payload.subtitle && payload.subtitle.toLowerCase().includes('strike')) ||
+        adjustedSeries.some(series => series.name.toLowerCase().includes('strike'))
+    );
+
+    if (
+      hasStrikeCue &&
+      numericValues.length === adjustedXAxis.values.length &&
+      numericValues.every(value => Number.isFinite(value) && value > 0)
+    ) {
+      adjustedXAxis = {
+        ...adjustedXAxis,
+        valueType: 'category',
+        values: adjustedXAxis.values.map(value => value),
+      };
+    } else if (numericValues.length > 0 && numericValues.every(value => value > 0)) {
+      clampNumericXAxis = true;
+    }
+  }
+
+  const option = toEChartsOption(
+    { ...payload, xAxis: adjustedXAxis, series: adjustedSeries },
+    { clampNumericXAxis }
+  );
   const xRange = computeXRange(adjustedXAxis.valueType, adjustedXAxis.values);
 
   return {
