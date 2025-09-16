@@ -79,6 +79,8 @@ type ChartOptionExtras = {
   clampNumericXAxis?: boolean;
 };
 
+type OptionOrientation = 'calls' | 'puts';
+
 const normalizeArrangement = (
   input: ChartInput['xAxis']['arrangement']
 ): RecognizedArrangement | null => {
@@ -144,6 +146,22 @@ const normalizeArrangement = (
   }
 
   return null;
+};
+
+const detectOptionOrientation = (sources: Array<string | undefined | null>): OptionOrientation | null => {
+  let orientation: OptionOrientation | null = null;
+  for (const source of sources) {
+    if (!source) continue;
+    const lower = source.toLowerCase();
+    if (lower.includes('put')) {
+      orientation = 'puts';
+      break;
+    }
+    if (!orientation && lower.includes('call')) {
+      orientation = 'calls';
+    }
+  }
+  return orientation;
 };
 
 const buildAxisName = (axis?: { label?: string; unit?: string }) => {
@@ -434,6 +452,39 @@ const chartToolExecute: ToolSpec['execute'] = async (args: unknown) => {
         ...adjustedXAxis,
         valueType: 'category',
         values: sortedIndices.map(i => payload.xAxis.values[i]),
+      };
+      adjustedSeries = adjustedSeries.map<NormalizedSeriesEntry>(entry => ({
+        ...entry,
+        data: sortedIndices.map(i => entry.data[i]),
+      }));
+    }
+  }
+
+  const numericValuesForFallback = adjustedXAxis.values
+    .map(value => (typeof value === 'number' ? value : Number(value)))
+    .filter(value => Number.isFinite(value)) as number[];
+
+  if (!arrangement && numericValuesForFallback.length === adjustedXAxis.values.length) {
+    const orientation = detectOptionOrientation([
+      adjustedXAxis.label,
+      payload.title,
+      payload.subtitle,
+      ...adjustedSeries.map(series => series.name),
+    ]);
+
+    if (orientation) {
+      const desiredDirection = orientation === 'calls' ? 'asc' : 'desc';
+      const sortedIndices = numericValuesForFallback
+        .map((value, idx) => ({ value, idx }))
+        .sort((a, b) =>
+          desiredDirection === 'asc' ? a.value - b.value : b.value - a.value
+        )
+        .map(entry => entry.idx);
+
+      adjustedXAxis = {
+        ...adjustedXAxis,
+        valueType: 'category',
+        values: sortedIndices.map(i => adjustedXAxis.values[i]),
       };
       adjustedSeries = adjustedSeries.map<NormalizedSeriesEntry>(entry => ({
         ...entry,
