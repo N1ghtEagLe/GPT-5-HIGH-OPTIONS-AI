@@ -77,6 +77,56 @@ const normalizeSeriesData = (targetLength: number, raw: Array<number | string | 
   return normalized;
 };
 
+const extractNumericValue = (input: string | number): number | null => {
+  if (typeof input === 'number') {
+    return Number.isFinite(input) ? input : null;
+  }
+  const trimmed = input.trim();
+  if (!/^[$\d]/.test(trimmed)) return null;
+  const sanitized = trimmed.replace(/,/g, '');
+  const match = sanitized.match(/^\$?-?\d+(?:\.\d+)?/);
+  if (!match) return null;
+  const parsed = Number.parseFloat(match[0].replace('$', ''));
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const detectStrikeAxisValues = (values: Array<string | number>) => {
+  if (values.length < 2) return null;
+  const numeric = values.map(v => extractNumericValue(typeof v === 'number' ? v : String(v).trim()));
+  if (numeric.some(v => v === null || !Number.isFinite(v as number))) return null;
+  const numbers = numeric as number[];
+  if (numbers.some(v => v <= 0)) return null;
+  if (new Set(numbers.map(v => v.toFixed(4))).size < 2) return null;
+  return numbers;
+};
+
+const inferStrikeSortDirection = (
+  series: Array<{ name: string; data: Array<number | null> }>,
+  numericValues: number[]
+): 'asc' | 'desc' => {
+  const lowerNames = series.map(s => s.name.toLowerCase());
+  const hasPut = lowerNames.some(name => name.includes('put'));
+  const hasCall = lowerNames.some(name => name.includes('call'));
+  if (hasPut && !hasCall) return 'desc';
+  if (hasCall && !hasPut) return 'asc';
+
+  for (const entry of series) {
+    const lower = entry.name.toLowerCase();
+    if (lower.includes('delta')) {
+      const first = entry.data.find(value => typeof value === 'number' && Number.isFinite(value));
+      if (typeof first === 'number') {
+        if (first < 0) return 'desc';
+        if (first > 0) return 'asc';
+      }
+    }
+  }
+
+  const monotonicAsc = numericValues.every((value, idx, arr) => idx === 0 || arr[idx - 1] <= value);
+  const monotonicDesc = numericValues.every((value, idx, arr) => idx === 0 || arr[idx - 1] >= value);
+  if (monotonicDesc && !monotonicAsc) return 'desc';
+  return 'asc';
+};
+
 const toPairData = (xValues: Array<string | number>, data: Array<number | null>) =>
   xValues.map((x, idx) => {
     const y = data[idx];
@@ -254,8 +304,35 @@ const chartToolExecute: ToolSpec['execute'] = async (args: unknown) => {
     };
   }
 
-  const option = toEChartsOption({ ...payload, series: normalizedSeries });
-  const xRange = computeXRange(payload.xAxis.valueType, payload.xAxis.values);
+  let adjustedXAxis = { ...payload.xAxis };
+  let adjustedSeries = normalizedSeries;
+
+  const strikeNumbers = payload.xAxis.valueType === 'datetime' ? null : detectStrikeAxisValues(payload.xAxis.values);
+  if (strikeNumbers) {
+    const direction = inferStrikeSortDirection(normalizedSeries, strikeNumbers);
+    const indexed = strikeNumbers.map((value, idx) => ({ value, idx }));
+    indexed.sort((a, b) => (direction === 'asc' ? a.value - b.value : b.value - a.value));
+    const seen = new Set<number>();
+    const sortedIndices: number[] = [];
+    for (const item of indexed) {
+      if (!seen.has(item.idx)) {
+        seen.add(item.idx);
+        sortedIndices.push(item.idx);
+      }
+    }
+    adjustedXAxis = {
+      ...adjustedXAxis,
+      valueType: 'category',
+      values: sortedIndices.map(i => payload.xAxis.values[i]),
+    };
+    adjustedSeries = adjustedSeries.map(entry => ({
+      ...entry,
+      data: sortedIndices.map(i => entry.data[i]),
+    }));
+  }
+
+  const option = toEChartsOption({ ...payload, xAxis: adjustedXAxis, series: adjustedSeries });
+  const xRange = computeXRange(adjustedXAxis.valueType, adjustedXAxis.values);
 
   return {
     ok: true,
@@ -264,22 +341,22 @@ const chartToolExecute: ToolSpec['execute'] = async (args: unknown) => {
     subtitle: payload.subtitle,
     spec: option,
     axisMeta: {
-      x: payload.xAxis,
+      x: adjustedXAxis,
       y: payload.yAxes ?? {},
     },
-    series: normalizedSeries.map(s => ({
+    series: adjustedSeries.map(s => ({
       name: s.name,
       axis: s.axis,
     })),
     dataSummary: {
-      pointCount: payload.xAxis.values.length,
-      seriesNames: normalizedSeries.map(s => s.name),
+      pointCount: adjustedXAxis.values.length,
+      seriesNames: adjustedSeries.map(s => s.name),
       xRange,
     },
     tooltip: payload.tooltip ?? {},
     source: {
-      x: payload.xAxis.values,
-      series: normalizedSeries.map(s => ({ name: s.name, data: s.data })),
+      x: adjustedXAxis.values,
+      series: adjustedSeries.map(s => ({ name: s.name, data: s.data })),
     },
     generatedAt: new Date().toISOString(),
   };
