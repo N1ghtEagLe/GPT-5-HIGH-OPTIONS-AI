@@ -119,6 +119,12 @@ const toEChartsOption = (input: z.infer<typeof chartInputSchema>) => {
     boundaryGap: chartType === 'bar',
     axisLine: { lineStyle: { color: '#adb5bd' } },
     axisLabel: { color: '#495057' },
+    nameGap: 28,
+    nameTextStyle: {
+      color: '#495057',
+      fontSize: 12,
+      padding: [8, 0, 0, 0],
+    },
   };
 
   const yAxisOptionLeft: Record<string, unknown> = {
@@ -128,6 +134,12 @@ const toEChartsOption = (input: z.infer<typeof chartInputSchema>) => {
     axisLabel: { color: '#495057' },
     axisLine: { lineStyle: { color: '#adb5bd' } },
     splitLine: { lineStyle: { type: 'dashed', opacity: 0.4 } },
+    nameGap: 50,
+    nameTextStyle: {
+      color: '#495057',
+      fontSize: 12,
+      padding: [0, 0, 0, 0],
+    },
   };
 
   const yAxisOptions: Array<Record<string, unknown>> = [yAxisOptionLeft];
@@ -139,6 +151,12 @@ const toEChartsOption = (input: z.infer<typeof chartInputSchema>) => {
       axisLabel: { color: '#495057' },
       axisLine: { lineStyle: { color: '#adb5bd' } },
       splitLine: { show: false },
+      nameGap: 50,
+      nameTextStyle: {
+        color: '#495057',
+        fontSize: 12,
+        padding: [0, 0, 0, 0],
+      },
     });
   }
 
@@ -196,30 +214,17 @@ const toEChartsOption = (input: z.infer<typeof chartInputSchema>) => {
     return base;
   });
 
-  const gridTop = title || subtitle ? 72 : 48;
-  const titleOption: Record<string, unknown> = {
-    left: 'center',
-    textStyle: { fontSize: 16, fontWeight: 600 },
-    subtextStyle: { fontSize: 12, color: '#6c757d' },
-  };
-  if (title) titleOption.text = title;
-  if (subtitle) titleOption.subtext = subtitle;
-
   const option: Record<string, unknown> = {
     backgroundColor: 'transparent',
     animation: false,
     color: palette,
     tooltip: tooltipOption,
     legend: legendOption,
-    grid: { left: 56, right: rightAxisUsed ? 64 : 32, top: gridTop, bottom: 84 },
+    grid: { left: 64, right: rightAxisUsed ? 80 : 40, top: 32, bottom: 84, containLabel: true },
     xAxis: xAxisOption,
     yAxis: yAxisOptions,
     series: seriesOptions,
   };
-
-  if (title || subtitle) {
-    option.title = titleOption;
-  }
 
   return option;
 };
