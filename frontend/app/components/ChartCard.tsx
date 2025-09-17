@@ -110,7 +110,7 @@ export function ChartCard({ chart }: ChartCardProps) {
       return ['#3b82f6', '#22c55e', '#f97316', '#a855f7', '#ef4444'];
     }
     return colors;
-  }, [chart.spec, chart.id, chart.generatedAt]);
+  }, [chart.spec, chart.id, chart.generatedAt, isDarkMode]);
 
   const themeTextColors = useMemo(() => {
     if (typeof window === 'undefined') {
@@ -125,7 +125,7 @@ export function ChartCard({ chart }: ChartCardProps) {
     const secondary = style.getPropertyValue('--text-secondary').trim() || '#6c757d';
     const axis = style.getPropertyValue('--border-primary').trim() || secondary || '#495057';
     return { primary, secondary, axis };
-  }, [chart.id, chart.generatedAt]);
+  }, [chart.id, chart.generatedAt, isDarkMode]);
 
   const option = useMemo(() => {
     if (!chart?.spec) return undefined;
