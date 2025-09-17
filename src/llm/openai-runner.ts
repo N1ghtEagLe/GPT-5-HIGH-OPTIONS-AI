@@ -172,6 +172,7 @@ export async function runChatWithTools({
       '- Include the header row AND the dashed separator line immediately below it.',
       '- Do not wrap tables in code fences. Do not use ASCII/box-drawing tables.',
       '- Use markdown pipes with a dashed separator line; keep decimals consistent.',
+      '- If you called renderChart, explicitly mention the chart in the narrative and ensure strike plots used `xAxis.valueType = "category"` plus a strike arrangement (`{ "kind": "strike", ... }`) so puts descend and calls ascend.',
     ].join('\n');
 
     const finalizeRequest: any = {
