@@ -3,6 +3,7 @@
 import dynamic from 'next/dynamic';
 import { useMemo } from 'react';
 import * as echarts from 'echarts';
+import { useTheme } from '../contexts/ThemeContext';
 
 const ReactECharts = dynamic(() => import('echarts-for-react'), { ssr: false });
 
@@ -91,6 +92,7 @@ const buildFormatter = (
 };
 
 export function ChartCard({ chart }: ChartCardProps) {
+  const { isDarkMode } = useTheme();
   const palette = useMemo(() => {
     if (typeof window === 'undefined') {
       return Array.isArray(chart.spec?.color) && chart.spec?.color.length > 0
@@ -133,6 +135,40 @@ export function ChartCard({ chart }: ChartCardProps) {
       clonedTooltip.formatter = formatter;
     }
 
+    const tooltipTheme = isDarkMode
+      ? {
+          background: 'rgba(0, 0, 0, 0.5)',
+          border: 'rgba(245, 158, 11, 0.8)',
+          text: '#fbbf24',
+        }
+      : {
+          background: 'rgba(255, 255, 255, 0.5)',
+          border: 'rgba(37, 99, 235, 0.6)',
+          text: '#1d4ed8',
+        };
+
+    clonedTooltip.backgroundColor = tooltipTheme.background;
+    clonedTooltip.borderColor = tooltipTheme.border;
+    clonedTooltip.borderWidth = typeof clonedTooltip.borderWidth === 'number' ? clonedTooltip.borderWidth : 1;
+    clonedTooltip.textStyle = {
+      ...(clonedTooltip.textStyle ?? {}),
+      color: tooltipTheme.text,
+      fontWeight: '600',
+    };
+    const cssExtras = clonedTooltip.extraCssText ? `${clonedTooltip.extraCssText};` : '';
+    clonedTooltip.extraCssText = `${cssExtras}backdrop-filter: blur(6px);border-radius:8px;`.replace(';;', ';');
+
+    const pointerColor = tooltipTheme.text;
+    const pointer = clonedTooltip.axisPointer ?? {};
+    if (pointer.type === 'cross') {
+      pointer.lineStyle = { ...(pointer.lineStyle ?? {}), color: pointerColor, opacity: 0.7 };
+      pointer.crossStyle = { ...(pointer.crossStyle ?? {}), color: pointerColor, opacity: 0.7 };
+    } else if (pointer.type === 'shadow') {
+      pointer.shadowStyle = { ...(pointer.shadowStyle ?? {}), color: tooltipTheme.background };
+      pointer.lineStyle = { ...(pointer.lineStyle ?? {}), color: pointerColor, opacity: 0.4 };
+    }
+    clonedTooltip.axisPointer = pointer;
+
     const legend = chart.spec.legend
       ? Array.isArray(chart.spec.legend)
         ? chart.spec.legend.map(entry => ({
@@ -151,24 +187,43 @@ export function ChartCard({ chart }: ChartCardProps) {
           }
       : undefined;
 
-    const decorateAxis = (axis: any) => ({
-      ...(axis ?? {}),
-      axisLabel: {
-        ...(axis?.axisLabel ?? {}),
-        color: themeTextColors.secondary,
-      },
-      axisLine: {
-        ...(axis?.axisLine ?? {}),
-        lineStyle: {
-          ...((axis?.axisLine && axis.axisLine.lineStyle) || {}),
-          color: themeTextColors.axis,
+    const decorateAxis = (axis: any) => {
+      const base = axis ?? {};
+      const decorated = {
+        ...base,
+        axisLabel: {
+          ...(base.axisLabel ?? {}),
+          color: themeTextColors.secondary,
         },
-      },
-      nameTextStyle: {
-        ...(axis?.nameTextStyle ?? {}),
-        color: themeTextColors.secondary,
-      },
-    });
+        axisLine: {
+          ...(base.axisLine ?? {}),
+          lineStyle: {
+            ...((base.axisLine && base.axisLine.lineStyle) || {}),
+            color: themeTextColors.axis,
+          },
+        },
+        nameTextStyle: {
+          ...(base.nameTextStyle ?? {}),
+          color: themeTextColors.secondary,
+        },
+      } as any;
+
+      if (!isDarkMode) {
+        const existing = base.splitLine ?? {};
+        const existingLineStyle = existing.lineStyle ?? {};
+        decorated.splitLine = {
+          ...existing,
+          lineStyle: {
+            color: existingLineStyle.color ?? 'rgba(71, 85, 105, 0.65)',
+            width: existingLineStyle.width ?? 1,
+            type: existingLineStyle.type ?? 'dashed',
+            opacity: existingLineStyle.opacity ?? 0.8,
+          },
+        };
+      }
+
+      return decorated;
+    };
 
     const xAxis = Array.isArray(chart.spec.xAxis)
       ? chart.spec.xAxis.map(decorateAxis)
@@ -203,7 +258,7 @@ export function ChartCard({ chart }: ChartCardProps) {
       series,
       tooltip: { ...clonedTooltip },
     };
-  }, [chart, palette, themeTextColors]);
+  }, [chart, palette, themeTextColors, isDarkMode]);
 
   const height = useMemo(() => {
     const seriesCount = Array.isArray(chart.spec?.series) ? chart.spec.series.length : 1;
