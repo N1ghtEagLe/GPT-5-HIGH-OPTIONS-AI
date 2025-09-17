@@ -303,7 +303,7 @@ a {
   border-radius: 0.75rem;
   line-height: 1.6;
   overflow-x: auto;
-  font-size: 1.125rem;
+  font-size: 1rem;
 }
 
 /* Special handling for messages containing tables */
