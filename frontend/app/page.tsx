@@ -29,10 +29,11 @@ interface SessionImage {
   dataBase64: string;
 }
 
-type ModelId = 'o3-2025-04-16' | 'gpt-5-2025-08-07';
+type ModelId = 'o3-2025-04-16' | 'gpt-5-2025-08-07' | 'gpt-5.1-2025-11-13';
 const MODEL_OPTIONS: Array<{ id: ModelId; label: string }> = [
   { id: 'o3-2025-04-16', label: 'o3' },
-  { id: 'gpt-5-2025-08-07', label: 'GPT-5' }
+  { id: 'gpt-5-2025-08-07', label: 'GPT-5' },
+  { id: 'gpt-5.1-2025-11-13', label: 'GPT-5.1' }
 ];
 
 export default function ChatPage() {
@@ -47,7 +48,7 @@ export default function ChatPage() {
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [attachError, setAttachError] = useState('');
   const [sessionImages, setSessionImages] = useState<SessionImage[]>([]);
-  const [model, setModel] = useState<ModelId>('o3-2025-04-16');
+  const [model, setModel] = useState<ModelId>('gpt-5.1-2025-11-13');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
